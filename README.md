@@ -1,7 +1,13 @@
 # Parser_Project
-HSE project
+
 ## Схема системы
 ![alt text](https://github.com/user-attachments/assets/1c8c1ce7-b9d1-4501-aa9d-e1fc46d95b12)
+
+Планируем паристь 
+
+- [](https://www.rbc.ru/quote)
+- [](https://smart-lab.ru/q/shares/)
+- [](https://www.dohod.ru/ik/analytics/share)
 
 ## Описание проекта
 ### Что будет видеть пользователь
