@@ -5,9 +5,9 @@
 
 Планируем паристь 
 
-- [](https://www.rbc.ru/quote)
-- [](https://smart-lab.ru/q/shares/)
-- [](https://www.dohod.ru/ik/analytics/share)
+- [rbk](https://www.rbc.ru/quote)
+- [smart-lab](https://smart-lab.ru/q/shares/)
+- [dohod](https://www.dohod.ru/ik/analytics/share)
 
 ## Описание проекта
 ### Что будет видеть пользователь
