@@ -29,6 +29,7 @@ class RBCParser(BaseParser):
             Список словарей с данными о новостях:
             - title: заголовок новости (полный, со страницы статьи)
             - url: ссылка на новость
+            - text: текст новости
         """
         html = self.fetch_html()
         if not html:
@@ -84,15 +85,17 @@ class RBCParser(BaseParser):
                         seen_urls.add(clean_url)
                         news_urls.append(full_url)
             
-            # Шаг 2: Переходим по каждому URL и извлекаем заголовки
+            # Шаг 2: Переходим по каждому URL и извлекаем заголовки и текст
             news_items = []
             for url in news_urls[:30]:  # Ограничиваем до 30 новостей для скорости
                 try:
                     title = self._extract_title_from_page(url)
+                    text = self._extract_text_from_page(url)
                     if title:
                         news_items.append({
                             "title": title,
-                            "url": url
+                            "url": url,
+                            "text": text
                         })
                     # Небольшая задержка, чтобы не перегружать сервер
                     time.sleep(0.1)
@@ -157,6 +160,102 @@ class RBCParser(BaseParser):
             
         except Exception as e:
             print(f"Ошибка при извлечении заголовка из {url}: {e}")
+            return ""
+    
+    def _extract_text_from_page(self, url: str) -> str:
+        """
+        Извлекает текст новости со страницы статьи
+        
+        Args:
+            url: URL страницы новости
+            
+        Returns:
+            Текст новости или пустая строка
+        """
+        try:
+            response = self.session.get(url, timeout=10)
+            if response.status_code != 200:
+                return ""
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Способ 1: Ищем article тег
+            article = soup.find('article')
+            if article:
+                # Извлекаем все параграфы из article
+                paragraphs = article.find_all('p')
+                if paragraphs:
+                    text_parts = [p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True)]
+                    # Фильтруем слишком короткие параграфы (вероятно, не основной текст)
+                    text_parts = [p for p in text_parts if len(p) > 20]
+                    if text_parts:
+                        return ' '.join(text_parts)
+            
+            # Способ 2: Ищем div с классом article-text, article-body, content и т.д.
+            content_divs = soup.find_all(['div', 'section'], class_=lambda x: x and any(
+                word in str(x).lower() for word in ['article', 'text', 'content', 'body', 'story']
+            ))
+            
+            for div in content_divs:
+                paragraphs = div.find_all('p')
+                if paragraphs:
+                    text_parts = [p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True)]
+                    text_parts = [p for p in text_parts if len(p) > 20]
+                    if text_parts:
+                        return ' '.join(text_parts)
+            
+            # Способ 3: Ищем все параграфы на странице (если нет специальных контейнеров)
+            all_paragraphs = soup.find_all('p')
+            if all_paragraphs:
+                text_parts = []
+                skip_words = ['подписка', 'реклама', 'cookie', 'политика конфиденциальности', 
+                             'читайте также', 'подробнее', 'источник', 'фото:', 'фото']
+                for p in all_paragraphs:
+                    text = p.get_text(strip=True)
+                    # Пропускаем слишком короткие или служебные параграфы
+                    if (len(text) > 50 and 
+                        not any(skip in text.lower() for skip in skip_words) and
+                        not text.startswith('©') and
+                        not re.match(r'^\d{1,2}:\d{2}', text)):  # Пропускаем время
+                        text_parts.append(text)
+                
+                if text_parts:
+                    # Фильтруем параграфы - убираем рекламу и служебную информацию
+                    filtered_parts = []
+                    skip_phrases = [
+                        'читайте рбк', 'реклама', 'подписка', 'cookie', 
+                        'политика конфиденциальности', 'какое вино подать',
+                        'как приготовить', 'чем занять детей', 'как легко завести разговор',
+                        'из каких сыров', 'что делать, если пролил', 'какие есть правила',
+                        'какие игры можно', 'как легко запомнить', 'попробуйте новую функцию',
+                        'гигачат', 'пао «сбербанк»', '18+'
+                    ]
+                    
+                    for p in text_parts:
+                        # Пропускаем слишком короткие параграфы
+                        if len(p) < 50:
+                            continue
+                        # Пропускаем параграфы с рекламой
+                        if any(phrase in p.lower() for phrase in skip_phrases):
+                            continue
+                        # Пропускаем параграфы, которые начинаются с "Фото:" или "Видео:"
+                        if re.match(r'^(Фото|Видео|Фото:|Видео:)', p, re.I):
+                            continue
+                        filtered_parts.append(p)
+                    
+                    if filtered_parts:
+                        # Берем параграфы, которые выглядят как основной текст
+                        # Обычно это параграфы длиннее 100 символов
+                        main_text = [p for p in filtered_parts if len(p) > 100]
+                        if main_text:
+                            return ' '.join(main_text[:15])  # Берем до 15 параграфов
+                        else:
+                            return ' '.join(filtered_parts[:10])
+            
+            return ""
+            
+        except Exception as e:
+            print(f"Ошибка при извлечении текста из {url}: {e}")
             return ""
 
 

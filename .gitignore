@@ -1,17 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Environment variables
 .env
 
-__pycache__/
-*.pyc
-
-*.log
-*.sqlite3
-
-.idea/
+# IDE
 .vscode/
+.idea/
 *.swp
+*.swo
+*~
 
+# Docker
+docker_data/
+
+# OS
 .DS_Store
 Thumbs.db
 
-venv/
-env/
+# Logs
+*.log
