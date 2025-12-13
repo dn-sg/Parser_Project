@@ -34,7 +34,7 @@ class BaseParser:
             HTML содержимое или None в случае ошибки
         """
         try:
-            response = self.session.get(self.url, timeout=10)
+            response = self.session.get(self.url, headers=self.headers, timeout=10)
             response.raise_for_status()
             return response.text
         except requests.RequestException as e:
