@@ -5,15 +5,13 @@
 import sys
 import json
 from parsers.rbc import RBCParser
+from parsers.dohod import DohodParser
 
 
 def main():
     """Запуск парсера РБК"""
-    parser = RBCParser()
-    data = parser.get_parsed_data()
-    
-    # Выводим результат в формате JSON
-    print(json.dumps(data, ensure_ascii=False, indent=2))
+    parser = DohodParser()
+    print(parser.get_parsed_data())
 
 
 if __name__ == "__main__":
