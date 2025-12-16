@@ -1,180 +1,150 @@
 """
-Парсер для сайта Dohod.ru
+Парсер для раздела дивидендов сайта Dohod.ru
 """
 from .base_parser import BaseParser
 from bs4 import BeautifulSoup
 from typing import List, Dict
 import re
 
-
 class DohodParser(BaseParser):
-    """Парсер для сайта Dohod.ru"""
-    
+    """
+    Парсер страницы дивидендов Dohod.ru
+    URL: https://www.dohod.ru/ik/analytics/dividend
+    """
+
     def __init__(self):
-        super().__init__("https://www.dohod.ru/ik/analytics/share")
-    
+        super().__init__("https://www.dohod.ru/ik/analytics/dividend")
+
     def parse(self) -> List[Dict]:
         """
-        Парсинг данных с сайта Dohod.ru
-        
+        Парсинг таблицы с дивидендами.
+
         Returns:
-            Список словарей с данными о компаниях
+            Список словарей, где каждый словарь — это строка таблицы.
         """
         html = self.fetch_html()
         if not html:
             return []
-        
-        soup = BeautifulSoup(html, 'lxml')
-        companies = []
-        
+
+        soup = BeautifulSoup(html, 'lxml') # Используем lxml для скорости
+        data_list = []
+
         try:
-            # Поиск таблицы или списка с акциями
-            table = soup.find('table', class_=re.compile(r'quote|stock|table|data', re.I))
+            # Ищем основную таблицу с данными
+            # Часто она не имеет ID, поэтому ищем по характерным заголовкам или просто первую большую таблицу
+            table = soup.find('table', {'id': 'table-dividend'})
+
+            # Если по ID не нашли, ищем по классу content-table или просто первую таблицу
             if not table:
-                # Пробуем найти любую таблицу
-                table = soup.find('table')
-            
-            if table:
-                rows = table.find_all('tr')[1:21]  # Пропускаем заголовок
-                
-                for row in rows:
-                    try:
-                        cells = row.find_all(['td', 'th'])
-                        if len(cells) < 2:
-                            continue
-                        
-                        # Извлечение тикера и названия
-                        ticker = ""
-                        company_name = ""
-                        
-                        # Первая или вторая колонка обычно содержит тикер/название
-                        for i, cell in enumerate(cells[:3]):
-                            text = cell.get_text(strip=True)
-                            # Если текст короткий и в верхнем регистре - вероятно тикер
-                            if len(text) <= 6 and text.isupper() and not ticker:
-                                ticker = text
-                            # Если текст длиннее - вероятно название компании
-                            elif len(text) > 6 and not company_name:
-                                company_name = text
-                        
-                        if not ticker and len(cells) > 0:
-                            ticker = cells[0].get_text(strip=True)
-                        if not company_name and len(cells) > 1:
-                            company_name = cells[1].get_text(strip=True)
-                        
-                        # Поиск цены, изменения и объема
-                        price = 0.0
-                        change = 0.0
-                        volume = 0
-                        
-                        for cell in cells:
-                            text = cell.get_text(strip=True)
-                            # Проверка на цену (число с точкой/запятой)
-                            if re.match(r'^\d+[.,]\d+$', text.replace(' ', '')):
-                                if price == 0.0:
-                                    price = self._parse_price(text)
-                            # Проверка на изменение (содержит + или -)
-                            elif re.match(r'^[+-]', text):
-                                change = self._parse_change(text)
-                            # Проверка на объем (большое число)
-                            elif re.match(r'^\d{4,}', text.replace(' ', '')):
-                                volume = self._parse_volume(text)
-                        
-                        if ticker:
-                            companies.append({
-                                "ticker": ticker,
-                                "company_name": company_name or ticker,
-                                "price": price,
-                                "change": change,
-                                "volume": volume,
-                                "source": "Dohod"
-                            })
-                    except Exception as e:
-                        print(f"Ошибка при парсинге строки: {e}")
-                        continue
-            else:
-                # Альтернативный способ - поиск по классам/атрибутам
-                items = soup.find_all(['div', 'li', 'tr'], 
-                                     class_=re.compile(r'quote|stock|share|item|row', re.I))
-                
-                for item in items[:20]:
-                    try:
-                        # Поиск тикера
-                        ticker_elem = item.find(['span', 'div', 'td'], 
-                                               class_=re.compile(r'ticker|symbol|code', re.I))
-                        if not ticker_elem:
-                            ticker_elem = item.find('strong') or item.find('b')
-                        
-                        ticker = ticker_elem.get_text(strip=True) if ticker_elem else ""
-                        
-                        if ticker:
-                            # Поиск названия
-                            name_elem = item.find(['a', 'span', 'div'], 
-                                                 class_=re.compile(r'name|title|company', re.I))
-                            company_name = name_elem.get_text(strip=True) if name_elem else ticker
-                            
-                            companies.append({
-                                "ticker": ticker,
-                                "company_name": company_name,
-                                "price": 0.0,
-                                "change": 0.0,
-                                "volume": 0,
-                                "source": "Dohod"
-                            })
-                    except Exception as e:
-                        print(f"Ошибка при парсинге элемента: {e}")
-                        continue
-        
+                tables = soup.find_all('table')
+                for t in tables:
+                    if t.find('th', text=re.compile('Акция|Ticker|Symbol')):
+                        table = t
+                        break
+
+            if not table:
+                print("Таблица с дивидендами не найдена")
+                return []
+
+            # Проходим по строкам тела таблицы
+            # tbody может отсутствовать в верстке, поэтому ищем tr внутри table
+            rows = table.find_all('tr')
+
+            # Пропускаем заголовки (обычно первые 1-2 строки)
+            # Фильтруем строки, которые являются заголовками или фильтрами
+            data_rows = [row for row in rows if not row.find('th') and 'filter-row' not in row.get('class', [])]
+
+            for row in data_rows:
+                cells = row.find_all('td')
+
+                # Пропускаем строки, где мало ячеек (например, разделители)
+                if len(cells) < 8:
+                    continue
+
+                try:
+                    # Извлечение данных по колонкам (индексы могут меняться, если сайт обновится)
+                    # 0: Иконка (пропускаем)
+                    # 1: Название акции (ссылка)
+                    name_link = cells[0].find('a')
+                    if not name_link:
+                         # Иногда первая ячейка с плюсиком, тогда смещаемся
+                         name_link = cells[1].find('a')
+
+                    ticker = ""
+                    company_name = name_link.get_text(strip=True) if name_link else ""
+
+                    # Пытаемся вытащить тикер из ссылки (обычно .../dividend/ticker)
+                    if name_link and 'href' in name_link.attrs:
+                        href_parts = name_link['href'].split('/')
+                        if href_parts:
+                            ticker = href_parts[-1].upper()
+
+                    # Собираем остальные поля, очищая от лишних пробелов и символов
+                    sector = self._get_text(cells, 2)
+                    period = self._get_text(cells, 3)
+
+                    payment_val = self._parse_float(self._get_text(cells, 4))
+                    currency = self._get_text(cells, 5)
+
+                    yield_percent = self._parse_percent(self._get_text(cells, 6))
+
+                    # Дата закрытия реестра
+                    record_date_raw = self._get_text(cells, 8)
+                    record_date = record_date_raw if self._is_valid_date(record_date_raw) else None
+
+                    # Капитализация
+                    capitalization = self._parse_float(self._get_text(cells, 9).replace(' ', ''))
+
+                    dsi_index = self._parse_float(self._get_text(cells, 10))
+
+                    item = {
+                        "ticker": ticker,
+                        "company_name": company_name,
+                        "sector": sector,
+                        "period": period,
+                        "payment_per_share": payment_val,
+                        "currency": currency,
+                        "yield_percent": yield_percent,
+                        "record_date_estimate": record_date,
+                        "capitalization_mln_rub": capitalization,
+                        "dsi": dsi_index
+                    }
+
+                    data_list.append(item)
+
+                except Exception as e:
+                    # Логируем ошибку, но не роняем весь парсер из-за одной строки
+                    # print(f"Ошибка парсинга строки {ticker}: {e}")
+                    continue
+
         except Exception as e:
-            print(f"Ошибка при парсинге Dohod: {e}")
-        
-        return companies
-    
-    def _parse_price(self, text: str) -> float:
-        """Парсинг цены из текста"""
+            print(f"Критическая ошибка парсинга Dohod: {e}")
+            return []
+
+        return data_list
+
+    def _get_text(self, cells, index):
+        """Безопасное получение текста из ячейки"""
+        if index < len(cells):
+            return cells[index].get_text(strip=True)
+        return ""
+
+    def _parse_float(self, text):
+        """Преобразование строки в float"""
         try:
-            cleaned = re.sub(r'[^\d.,]', '', text.replace(',', '.').replace(' ', ''))
-            return float(cleaned) if cleaned else 0.0
+            clean_text = re.sub(r'[^\d.,-]', '', text).replace(',', '.')
+            return float(clean_text) if clean_text else 0.0
         except:
             return 0.0
-    
-    def _parse_change(self, text: str) -> float:
-        """Парсинг изменения цены"""
+
+    def _parse_percent(self, text):
+        """Преобразование строки с процентом в float"""
         try:
-            cleaned = re.sub(r'[^\d.,+-]', '', text.replace(',', '.'))
-            if '%' in text:
-                cleaned = cleaned.replace('%', '')
-            if '+' in cleaned and not cleaned.startswith('+'):
-                cleaned = cleaned.replace('+', '')
-            if '-' in cleaned and not cleaned.startswith('-'):
-                cleaned = '-' + cleaned.replace('-', '')
-            return float(cleaned) if cleaned else 0.0
+            clean_text = text.replace('%', '').replace(',', '.').strip()
+            return float(clean_text) if clean_text else 0.0
         except:
             return 0.0
-    
-    def _parse_volume(self, text: str) -> int:
-        """Парсинг объема торгов"""
-        try:
-            text = text.upper().replace(' ', '')
-            multiplier = 1
-            if 'K' in text or 'К' in text:
-                multiplier = 1000
-                text = text.replace('K', '').replace('К', '')
-            elif 'M' in text or 'М' in text:
-                multiplier = 1000000
-                text = text.replace('M', '').replace('М', '')
-            elif 'B' in text or 'Б' in text:
-                multiplier = 1000000000
-                text = text.replace('B', '').replace('Б', '')
-            
-            cleaned = re.sub(r'[^\d]', '', text)
-            return int(float(cleaned) * multiplier) if cleaned else 0
-        except:
-            return 0
 
-
-if __name__ == "__main__":
-    parser = DohodParser()
-    data = parser.get_parsed_data()
-    print(data)
-
+    def _is_valid_date(self, text):
+        """Простая проверка, похоже ли на дату"""
+        return bool(re.match(r'\d{2}\.\d{2}\.\d{4}', text))
