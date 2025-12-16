@@ -5,9 +5,11 @@ import requests
 from bs4 import BeautifulSoup
 from typing import List, Dict, Optional
 import json
-import time
+import pg8000.dbapi # Библиотека для БД
+import os
+from dotenv import load_dotenv
 
-
+load_dotenv()
 class BaseParser:
     """Базовый класс для всех парсеров"""
     
@@ -61,6 +63,21 @@ class BaseParser:
             JSON строка
         """
         return json.dumps(data, ensure_ascii=False, indent=2)
+
+    # --- НОВОЕ: Подключение к БД ---
+    def _get_db_connection(self):
+        """Создает подключение к PostgreSQL используя .env"""
+        return pg8000.dbapi.connect(
+            host=os.getenv("POSTGRES_HOST", "localhost"),
+            port=os.getenv("POSTGRES_PORT", "5432"),
+            database=os.getenv("POSTGRES_DB"),
+            user=os.getenv("POSTGRES_USER"),
+            password=os.getenv("POSTGRES_PASSWORD")
+        )
+
+    def save_to_db(self, data: List[Dict]) -> None:
+        """Метод сохранения в БД (переопределяется в детях)"""
+        raise NotImplementedError("Метод save_to_db() должен быть реализован в дочернем классе")
     
     def get_parsed_data(self) -> str:
         """

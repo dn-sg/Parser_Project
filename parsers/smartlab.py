@@ -1,4 +1,4 @@
-from base_parser import BaseParser
+from .base_parser import BaseParser
 from bs4 import BeautifulSoup, Tag
 import logging
 from typing import List, Dict
@@ -188,8 +188,86 @@ class SmartlabParser(BaseParser):
             logger.error(msg=f"Критическая ошибка в методе parse(): {e}", exc_info=True)
             return []
 
+    def _clean_number(self, value: str) -> float:
+        """
+        Очищает строку (удаляет пробелы, %, заменяет запятые) и возвращает float
+        """
+        if not value or value == "No information!":
+            return 0.0
 
-if __name__ == "__main__":
+        # Убираем пробелы (разделители тысяч) и знаки % и +
+        clean_val = value.replace(" ", "").replace("%", "").replace("+", "")
+        # Если есть запятая, меняем на точку (хотя на smartlab обычно точки)
+        clean_val = clean_val.replace(",", ".")
+
+        try:
+            return float(clean_val)
+        except ValueError:
+            return 0.0
+
+    def save_to_db(self, data: List[Dict]) -> None:
+        """Сохранение данных в БД"""
+        if not data:
+            logger.warning("Нет данных для сохранения в БД.")
+            return
+
+        conn = None
+        try:
+            conn = self._get_db_connection()
+            cursor = conn.cursor()
+
+            # 1. Получаем ID источника (SmartLab)
+            cursor.execute("SELECT id FROM source WHERE name = 'SmartLab';")
+            source_row = cursor.fetchone()
+
+            if not source_row:
+                logger.error("Ошибка: Источник 'SmartLab' не найден в таблице source.")
+                return
+
+            source_id = source_row[0]
+
+            # 2. Вставляем данные
+            insert_query = """
+                INSERT INTO smartlab_stocks (
+                    source_id, name, ticker, 
+                    last_price_rub, price_change_percent, volume_mln_rub,
+                    change_week_percent, change_month_percent, change_ytd_percent, change_year_percent,
+                    capitalization_bln_rub, capitalization_bln_usd
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+            """
+
+            for item in data:
+                # Чистим данные перед вставкой
+                params = (
+                    source_id,
+                    item.get("name"),
+                    item.get("ticker"),
+                    self._clean_number(item.get("last price, rub")),
+                    self._clean_number(item.get("price change")),
+                    self._clean_number(item.get("volume, mln rub")),
+                    self._clean_number(item.get("change in one week")),
+                    self._clean_number(item.get("change in one month")),
+                    self._clean_number(item.get("change in year to date")),
+                    self._clean_number(item.get("change in twelve month")),
+                    self._clean_number(item.get("capitalization, bln rub")),
+                    self._clean_number(item.get("capitalization, bln usd")),
+                )
+                cursor.execute(insert_query, params)
+
+            conn.commit()
+            logger.info(f"Успешно обработано {len(data)} записей для БД.")
+
+        except Exception as e:
+            logger.error(f"Ошибка при сохранении в БД: {e}")
+            if conn:
+                conn.rollback()
+        finally:
+            if conn:
+                conn.close()
+
+
+def run_smartlab_parser():
     # Настройка логирования для консоли
     logging.basicConfig(
         level=logging.INFO,
@@ -205,13 +283,28 @@ if __name__ == "__main__":
 
     try:
         parser: SmartlabParser = SmartlabParser(url=URL, headers=HEADERS)
-        data: str = parser.get_parsed_data()
 
-        if data and data != "[]":
+        # 1. Парсинг (получаем список словарей)
+        logger.info("Начинаем парсинг...")
+        data_list = parser.parse()
+
+        if data_list:
+            # 2. Сохранение в БД
+            logger.info("Сохраняем данные в БД...")
+            parser.save_to_db(data_list)
+
+            # 3. Сохранение в JSON-файл
+            logger.info("Сохраняем данные в smartlab_stocks.json...")
+            json_str = parser.to_json(data_list)
             with open(file="smartlab_stocks.json", mode="w", encoding="utf-8") as file:
-                file.write(data)
-            logger.info(msg="Данные успешно сохранены в smartlab_stocks.json")
+                file.write(json_str)
+
+            logger.info("Все операции завершены успешно.")
         else:
-            logger.warning(msg="Нет данных для сохранения")
+            logger.warning("Нет данных для сохранения (парсинг вернул пустой список).")
+
     except Exception as e:
-        logger.error(msg=f"Ошибка при запуске парсера: {e}", exc_info=True)
+        logger.error(f"Ошибка при запуске парсера: {e}", exc_info=True)
+
+if __name__ == "__main__":
+    run_smartlab_parser()

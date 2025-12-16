@@ -6,10 +6,10 @@ from .base_parser import BaseParser
 from bs4 import BeautifulSoup
 from typing import List, Dict
 import re
-import json
 import time
+import logging
 
-
+logger = logging.getLogger(__name__)
 class RBCParser(BaseParser):
     """Парсер для сайта РБК - главная страница с новостями"""
     
@@ -100,13 +100,13 @@ class RBCParser(BaseParser):
                     # Небольшая задержка, чтобы не перегружать сервер
                     time.sleep(0.1)
                 except Exception as e:
-                    print(f"Ошибка при парсинге {url}: {e}")
+                    logger.warning(f"Ошибка при парсинге {url}: {e}")
                     continue
             
             return news_items
             
         except Exception as e:
-            print(f"Ошибка при парсинге: {e}")
+            logger.error(f"Критическая ошибка при парсинге: {e}", exc_info=True)
             return []
     
     def _extract_title_from_page(self, url: str) -> str:
@@ -159,7 +159,7 @@ class RBCParser(BaseParser):
             return ""
             
         except Exception as e:
-            print(f"Ошибка при извлечении заголовка из {url}: {e}")
+            logger.warning(f"Ошибка заголовка {url}: {e}")
             return ""
     
     def _extract_text_from_page(self, url: str) -> str:
@@ -255,11 +255,89 @@ class RBCParser(BaseParser):
             return ""
             
         except Exception as e:
-            print(f"Ошибка при извлечении текста из {url}: {e}")
+            logger.warning(f"Ошибка текста {url}: {e}")
             return ""
+
+    # --- Метод сохранения в БД ---
+    def save_to_db(self, data: List[Dict]) -> None:
+        """Сохранение новостей в таблицу rbc_news"""
+        if not data:
+            logger.warning("Нет данных для сохранения в БД.")
+            return
+
+        conn = None
+        try:
+            conn = self._get_db_connection()
+            cursor = conn.cursor()
+
+            # 1. Получаем ID источника (RBC)
+            # В pg8000 используем conn.run, но через DBAPI cursor.execute тоже работает
+            cursor.execute("SELECT id FROM source WHERE name = 'RBC'")
+            source_row = cursor.fetchone()
+
+            if not source_row:
+                logger.error("Ошибка: Источник 'RBC' не найден в таблице source.")
+                return
+
+            source_id = source_row[0]
+
+            # 2. Вставляем данные
+            # ON CONFLICT (url) DO NOTHING - чтобы не дублировать новости
+            insert_query = """
+                INSERT INTO rbc_news (source_id, title, url, text)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (url) DO NOTHING;
+            """
+
+            for item in data:
+                cursor.execute(insert_query, (
+                    source_id,
+                    item.get("title"),
+                    item.get("url"),
+                    item.get("text")
+                ))
+
+            conn.commit()
+            logger.info(f"Успешно обработано {len(data)} новостей для БД.")
+
+        except Exception as e:
+            logger.error(f"Ошибка при сохранении в БД: {e}", exc_info=True)
+            if conn:
+                conn.rollback()
+        finally:
+            if conn:
+                conn.close()
+
+
+def run_rbc_parser():
+    """Функция запуска парсера RBC"""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+    try:
+        parser = RBCParser()
+        logger.info("Начинаем парсинг RBC...")
+
+        # 1. Парсинг
+        news_list = parser.parse()
+
+        if news_list:
+            logger.info(f"Спарсено {len(news_list)} новостей.")
+
+            # 2. Сохранение в БД
+            logger.info("Сохраняем в БД...")
+            parser.save_to_db(news_list)
+
+            # 3. Сохранение в JSON (для проверки)
+            with open("rbc_news.json", "w", encoding="utf-8") as f:
+                f.write(parser.to_json(news_list))
+
+            logger.info("Все операции завершены успешно.")
+        else:
+            logger.warning("Список новостей пуст.")
+
+    except Exception as e:
+        logger.error(f"Ошибка запуска RBC: {e}", exc_info=True)
 
 
 if __name__ == "__main__":
-    parser = RBCParser()
-    data = parser.get_parsed_data()
-    print(data)
+    run_rbc_parser()

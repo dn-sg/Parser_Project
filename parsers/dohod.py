@@ -5,7 +5,11 @@ from .base_parser import BaseParser
 from bs4 import BeautifulSoup
 from typing import List, Dict
 import re
+import logging
+import json
+from datetime import datetime
 
+logger = logging.getLogger(__name__)
 class DohodParser(BaseParser):
     """
     Парсер страницы дивидендов Dohod.ru
@@ -26,7 +30,7 @@ class DohodParser(BaseParser):
         if not html:
             return []
 
-        soup = BeautifulSoup(html, 'lxml') # Используем lxml для скорости
+        soup = BeautifulSoup(html, "html.parser")
         data_list = []
 
         try:
@@ -43,7 +47,7 @@ class DohodParser(BaseParser):
                         break
 
             if not table:
-                print("Таблица с дивидендами не найдена")
+                logger.error("Таблица с дивидендами не найдена")
                 return []
 
             # Проходим по строкам тела таблицы
@@ -90,7 +94,7 @@ class DohodParser(BaseParser):
 
                     # Дата закрытия реестра
                     record_date_raw = self._get_text(cells, 8)
-                    record_date = record_date_raw if self._is_valid_date(record_date_raw) else None
+                    record_date = self._parse_date(record_date_raw)
 
                     # Капитализация
                     capitalization = self._parse_float(self._get_text(cells, 9).replace(' ', ''))
@@ -114,11 +118,10 @@ class DohodParser(BaseParser):
 
                 except Exception as e:
                     # Логируем ошибку, но не роняем весь парсер из-за одной строки
-                    # print(f"Ошибка парсинга строки {ticker}: {e}")
                     continue
 
         except Exception as e:
-            print(f"Критическая ошибка парсинга Dohod: {e}")
+            logger.error(f"Критическая ошибка парсинга Dohod: {e}", exc_info=True)
             return []
 
         return data_list
@@ -145,6 +148,109 @@ class DohodParser(BaseParser):
         except:
             return 0.0
 
-    def _is_valid_date(self, text):
-        """Простая проверка, похоже ли на дату"""
-        return bool(re.match(r'\d{2}\.\d{2}\.\d{4}', text))
+    def _parse_date(self, text: str):
+        """Конвертация DD.MM.YYYY -> Python date object"""
+        if not text:
+            return None
+        # Проверка паттерна
+        if not re.match(r'\d{2}\.\d{2}\.\d{4}', text):
+            return None
+        try:
+            return datetime.strptime(text, "%d.%m.%Y").date()
+        except ValueError:
+            return None
+
+    def save_to_db(self, data: List[Dict]) -> None:
+        """Сохранение данных в БД"""
+        if not data:
+            logger.warning("Нет данных для сохранения в БД.")
+            return
+
+        conn = None
+        try:
+            conn = self._get_db_connection()
+            cursor = conn.cursor()
+
+            # 1. Получаем ID источника
+            cursor.execute("SELECT id FROM source WHERE name = 'Dohod' OR name = 'dohod.ru' LIMIT 1;")
+            source_row = cursor.fetchone()
+
+            if not source_row:
+                logger.error("Источник 'Dohod' не найден в БД. Проверь таблицу source.")
+                return
+
+            source_id = source_row[0]
+
+            # 2. Вставка данных
+            # Предполагаем, что таблица называется dohod_divs
+            insert_query = """
+                INSERT INTO dohod_divs (
+                    source_id, ticker, company_name, sector, period, 
+                    payment_per_share, currency, yield_percent, 
+                    record_date_estimate, capitalization_mln_rub, dsi
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+            """
+
+            for item in data:
+                cursor.execute(insert_query, (
+                    source_id,
+                    item['ticker'],
+                    item['company_name'],
+                    item['sector'],
+                    item['period'],
+                    item['payment_per_share'],
+                    item['currency'],
+                    item['yield_percent'],
+                    item['record_date_estimate'],  # драйвер сам преобразует date -> SQL DATE
+                    item['capitalization_mln_rub'],
+                    item['dsi']
+                ))
+
+            conn.commit()
+            logger.info(f"Успешно сохранено {len(data)} записей дивидендов.")
+
+        except Exception as e:
+            logger.error(f"Ошибка сохранения в БД: {e}", exc_info=True)
+            if conn:
+                conn.rollback()
+        finally:
+            if conn:
+                conn.close()
+
+
+def run_dohod_parser():
+    """Функция запуска"""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+    try:
+        parser = DohodParser()
+        logger.info("Начинаем парсинг Dohod.ru...")
+
+        data = parser.parse()
+
+        if data:
+            logger.info(f"Спарсено {len(data)} записей.")
+
+            # Сохраняем в БД
+            parser.save_to_db(data)
+
+            # Сохраняем в JSON (для дебага, сериализуем даты как строки)
+            def date_handler(obj):
+                if hasattr(obj, 'isoformat'):
+                    return obj.isoformat()
+                return obj
+
+            with open("dohod_divs.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2, default=date_handler)
+
+            logger.info("Готово.")
+        else:
+            logger.warning("Пустой результат парсинга.")
+
+    except Exception as e:
+        logger.error(f"Ошибка запуска: {e}", exc_info=True)
+
+
+if __name__ == "__main__":
+    run_dohod_parser()

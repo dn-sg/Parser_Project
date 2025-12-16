@@ -1,7 +1,9 @@
 version: '3.9'
 
 services:
-
+  # ---------------------------------------------------------------------------
+  # База данных PostgreSQL
+  # ---------------------------------------------------------------------------
   db:
     image: postgres:15
     container_name: scraper_db
@@ -13,15 +15,20 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # При первом запуске выполнит init.sql из папки database
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - scraper_network
+    restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # Redis (брокер сообщений для Celery)
+  # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: scraper_redis
@@ -36,7 +43,11 @@ services:
       retries: 5
     networks:
       - scraper_network
+    restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # Веб-сервер (Flask/FastAPI)
+  # ---------------------------------------------------------------------------
   web:
     build:
       context: ./web
@@ -47,39 +58,17 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      POSTGRES_PORT: ${POSTGRES_PORT}
-      REDIS_URL: ${REDIS_URL}
+      POSTGRES_HOST: db  # Имя сервиса в сети Docker
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
       FLASK_ENV: ${FLASK_ENV}
     ports:
-      - "${API_PORT}:8000"
+      - "${API_PORT:-8000}:8000"
     volumes:
       - ./web:/app
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - scraper_network
-    restart: unless-stopped
-
-  celery_worker:
-    build:
-      context: ./web
-      dockerfile: Dockerfile
-    container_name: scraper_celery_worker
-    command: celery -A tasks worker --loglevel=info
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      POSTGRES_PORT: ${POSTGRES_PORT}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
-    volumes:
-      - ./web:/app
+      # Монтируем парсеры, чтобы веб-сервер тоже мог их видеть (если нужно)
       - ./parsers:/app/parsers
     depends_on:
       db:
@@ -90,6 +79,42 @@ services:
       - scraper_network
     restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # Celery Worker (выполняет задачи парсинга)
+  # ---------------------------------------------------------------------------
+  celery_worker:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: scraper_celery_worker
+    # Запускаем воркер. Убедись, что tasks.py лежит в /app (внутри контейнера)
+    command: celery -A tasks worker --loglevel=info
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      # Добавляем путь к корню, чтобы импорт "from parsers..." работал корректно
+      PYTHONPATH: /app
+    volumes:
+      - ./web:/app
+      # Важно: монтируем папку parsers внутрь контейнера, чтобы воркер видел код
+      - ./parsers:/app/parsers
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - scraper_network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Flower (мониторинг задач Celery)
+  # ---------------------------------------------------------------------------
   flower:
     build:
       context: ./web
@@ -97,10 +122,10 @@ services:
     container_name: scraper_flower
     command: celery -A tasks flower --port=5555
     environment:
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     ports:
-      - "${FLOWER_PORT}:5555"
+      - "${FLOWER_PORT:-5555}:5555"
     depends_on:
       - redis
       - celery_worker

@@ -2,8 +2,8 @@
 Пакет парсеров для различных сайтов
 """
 from .rbc import RBCParser
-from .smartlab import SmartLabParser
+from .smartlab import SmartlabParser
 from .dohod import DohodParser
 
-__all__ = ['RBCParser', 'SmartLabParser', 'DohodParser']
+__all__ = ['RBCParser', 'SmartlabParser', 'DohodParser']
 
