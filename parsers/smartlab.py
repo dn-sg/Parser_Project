@@ -6,29 +6,6 @@ from typing import List, Dict
 # Настройка логирования
 logger: logging.Logger = logging.getLogger(__name__)
 
-# Константы для селекторов HTML
-class Selectors:
-    """Селекторы для парсинга таблицы акций"""
-
-    MAIN_TABLE: Dict[str, str] = {"name": "div", "class_": "main__table"}
-    TABLE: Dict[str, str] = {"name": "table"}
-    ROW: Dict[str, str] = {"name": "tr"}
-    CELL_NAME: Dict[str, str] = {"name": "td", "class_": "trades-table__name"}
-    CELL_TICKER: Dict[str, str] = {"name": "td", "class_": "trades-table__ticker"}
-    CELL_PRICE: Dict[str, str] = {"name": "td", "class_": "trades-table__price"}
-    CELL_CHANGE_PER: Dict[str, str] = {
-        "name": "td",
-        "class_": "trades-table__change-per",
-    }
-    CELL_VOLUME: Dict[str, str] = {"name": "td", "class_": "trades-table__volume"}
-    CELL_WEEK: Dict[str, str] = {"name": "td", "class_": "trades-table__week"}
-    CELL_MONTH: Dict[str, str] = {"name": "td", "class_": "trades-table__month"}
-    CELL_YTD: Dict[str, str] = {"name": "td", "class_": "trades-table__first"}
-    CELL_YEAR: Dict[str, str] = {"name": "td", "class_": "trades-table__year"}
-    CELL_CAP_RUB: Dict[str, str] = {"name": "td", "class_": "trades-table__rub"}
-    CELL_CAP_USD: Dict[str, str] = {"name": "td", "class_": "trades-table__usd"}
-    LINK_NAME: Dict[str, str] = {"name": "a"}
-
 
 # Шаблон данных компании
 COMPANY_TEMPLATE: Dict[str, str] = {
@@ -51,26 +28,35 @@ class SmartlabParser(BaseParser):
         super().__init__(url=url, headers=headers)
 
     def _extract_cell_text(
-        self, row: Tag, selector: Dict, link_text: bool = False
+        self,
+        row: Tag,
+        tag_name: str,
+        class_name: str | None = None,
+        link_text: bool = False,
     ) -> str:
         """
         Безопасное извлечение текста из ячейки таблицы
 
         Args:
             row: Строка таблицы
-            selector: Селектор для поиска ячейки
+            tag_name: Название тега для поиска
+            class_name: Название класса для поиска (опционально)
             link_text: Если True, ищет текст внутри ссылки в ячейке
 
         Returns:
             Текст из ячейки или "No information!" если ячейка не найдена
         """
         try:
-            cell: Tag | None = row.find(**selector)
+            cell: Tag | None = (
+                row.find(name=tag_name, class_=class_name)
+                if class_name
+                else row.find(name=tag_name)
+            )
             if not cell:
                 return "No information!"
 
             if link_text:
-                link: Tag | None = cell.find(**Selectors.LINK_NAME)
+                link: Tag | None = cell.find("a")
                 if link:
                     return link.get_text(strip=True)
                 return "No information!"
@@ -98,19 +84,19 @@ class SmartlabParser(BaseParser):
             soup = BeautifulSoup(markup=html, features="html.parser")
 
             # Поиск основной таблицы
-            main_table: Tag | None = soup.find(**Selectors.MAIN_TABLE)
+            main_table: Tag | None = soup.find("div", class_="main__table")
             if not main_table:
                 logger.error(msg="Не найден контейнер таблицы (main__table)")
                 return []
 
             # Поиск самой таблицы
-            table: Tag | None = main_table.find(**Selectors.TABLE)
+            table: Tag | None = main_table.find("table")
             if not table:
                 logger.error(msg="Не найдена таблица внутри контейнера")
                 return []
 
             # Поиск строк таблицы
-            rows: List[Tag] = table.find_all(**Selectors.ROW)
+            rows: List[Tag] = table.find_all("tr")
             if not rows:
                 logger.warning(msg="Таблица пуста - не найдено строк")
                 return []
@@ -122,57 +108,60 @@ class SmartlabParser(BaseParser):
 
                     # Название компании
                     company_data["name"] = self._extract_cell_text(
-                        row=row, selector=Selectors.CELL_NAME, link_text=True
+                        row=row,
+                        tag_name="td",
+                        class_name="trades-table__name",
+                        link_text=True,
                     )
 
                     # Тикер
                     company_data["ticker"] = self._extract_cell_text(
-                        row=row, selector=Selectors.CELL_TICKER
+                        row=row, tag_name="td", class_name="trades-table__ticker"
                     )
 
                     # Цена, последняя
                     company_data["last price, rub"] = self._extract_cell_text(
-                        row=row, selector=Selectors.CELL_PRICE
+                        row=row, tag_name="td", class_name="trades-table__price"
                     )
 
                     # Изменение цены, %
                     company_data["price change"] = self._extract_cell_text(
-                        row=row, selector=Selectors.CELL_CHANGE_PER
+                        row=row, tag_name="td", class_name="trades-table__change-per"
                     )
 
                     # Объём, млн руб
                     company_data["volume, mln rub"] = self._extract_cell_text(
-                        row=row, selector=Selectors.CELL_VOLUME
+                        row=row, tag_name="td", class_name="trades-table__volume"
                     )
 
                     # 1 неделя, %
                     company_data["change in one week"] = self._extract_cell_text(
-                        row=row, selector=Selectors.CELL_WEEK
+                        row=row, tag_name="td", class_name="trades-table__week"
                     )
 
                     # 1 месяц, %
                     company_data["change in one month"] = self._extract_cell_text(
-                        row=row, selector=Selectors.CELL_MONTH
+                        row=row, tag_name="td", class_name="trades-table__month"
                     )
 
                     # Year to date, %
                     company_data["change in year to date"] = self._extract_cell_text(
-                        row=row, selector=Selectors.CELL_YTD
+                        row=row, tag_name="td", class_name="trades-table__first"
                     )
 
                     # 12 месяцев, %
                     company_data["change in twelve month"] = self._extract_cell_text(
-                        row=row, selector=Selectors.CELL_YEAR
+                        row=row, tag_name="td", class_name="trades-table__year"
                     )
 
                     # Капитализация, млрд руб
                     company_data["capitalization, bln rub"] = self._extract_cell_text(
-                        row=row, selector=Selectors.CELL_CAP_RUB
+                        row=row, tag_name="td", class_name="trades-table__rub"
                     )
 
                     # Капитализация, млрд USD
                     company_data["capitalization, bln usd"] = self._extract_cell_text(
-                        row=row, selector=Selectors.CELL_CAP_USD
+                        row=row, tag_name="td", class_name="trades-table__usd"
                     )
 
                     stocks.append(company_data)
@@ -305,6 +294,7 @@ def run_smartlab_parser():
 
     except Exception as e:
         logger.error(f"Ошибка при запуске парсера: {e}", exc_info=True)
+
 
 if __name__ == "__main__":
     run_smartlab_parser()
