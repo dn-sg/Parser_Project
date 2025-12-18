@@ -235,14 +235,14 @@ def run_dohod_parser():
             # Сохраняем в БД
             parser.save_to_db(data)
 
-            # Сохраняем в JSON (для дебага, сериализуем даты как строки)
-            def date_handler(obj):
-                if hasattr(obj, 'isoformat'):
-                    return obj.isoformat()
-                return obj
-
-            with open("dohod_divs.json", "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2, default=date_handler)
+            # # Сохраняем в JSON (для дебага, сериализуем даты как строки)
+            # def date_handler(obj):
+            #     if hasattr(obj, 'isoformat'):
+            #         return obj.isoformat()
+            #     return obj
+            #
+            # with open("dohod_divs.json", "w", encoding="utf-8") as f:
+            #     json.dump(data, f, ensure_ascii=False, indent=2, default=date_handler)
 
             logger.info("Готово.")
         else:

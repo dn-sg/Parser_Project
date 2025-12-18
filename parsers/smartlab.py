@@ -283,10 +283,10 @@ def run_smartlab_parser():
             parser.save_to_db(data_list)
 
             # 3. Сохранение в JSON-файл
-            logger.info("Сохраняем данные в smartlab_stocks.json...")
-            json_str = parser.to_json(data_list)
-            with open(file="smartlab_stocks.json", mode="w", encoding="utf-8") as file:
-                file.write(json_str)
+            # logger.info("Сохраняем данные в smartlab_stocks.json...")
+            # json_str = parser.to_json(data_list)
+            # with open(file="smartlab_stocks.json", mode="w", encoding="utf-8") as file:
+            #     file.write(json_str)
 
             logger.info("Все операции завершены успешно.")
         else:

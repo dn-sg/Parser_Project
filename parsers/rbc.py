@@ -328,8 +328,8 @@ def run_rbc_parser():
             parser.save_to_db(news_list)
 
             # 3. Сохранение в JSON (для проверки)
-            with open("rbc_news.json", "w", encoding="utf-8") as f:
-                f.write(parser.to_json(news_list))
+            # with open("rbc_news.json", "w", encoding="utf-8") as f:
+            #     f.write(parser.to_json(news_list))
 
             logger.info("Все операции завершены успешно.")
         else:

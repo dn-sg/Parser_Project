@@ -7,8 +7,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
 
 from parsers.rbc import RBCParser
-from parsers.smartlab import SmartLabParser
+from parsers.smartlab import SmartlabParser
 from parsers.dohod import DohodParser
 
-__all__ = ['RBCParser', 'SmartLabParser', 'DohodParser']
+__all__ = ['RBCParser', 'SmartlabParser', 'DohodParser']
 

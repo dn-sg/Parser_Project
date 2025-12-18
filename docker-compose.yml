@@ -1,9 +1,4 @@
-version: '3.9'
-
 services:
-  # ---------------------------------------------------------------------------
-  # База данных PostgreSQL
-  # ---------------------------------------------------------------------------
   db:
     image: postgres:15
     container_name: scraper_db
@@ -15,7 +10,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # При первом запуске выполнит init.sql из папки database
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -26,9 +20,6 @@ services:
       - scraper_network
     restart: unless-stopped
 
-  # ---------------------------------------------------------------------------
-  # Redis (брокер сообщений для Celery)
-  # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: scraper_redis
@@ -45,30 +36,26 @@ services:
       - scraper_network
     restart: unless-stopped
 
-  # ---------------------------------------------------------------------------
-  # Веб-сервер (Flask/FastAPI)
-  # ---------------------------------------------------------------------------
   web:
     build:
       context: ./web
       dockerfile: Dockerfile
     container_name: scraper_web
-    command: python app.py
+    # FastAPI instead of Flask:
+    command: uvicorn app:app --host 0.0.0.0 --port 8000
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_HOST: db  # Имя сервиса в сети Docker
+      POSTGRES_HOST: db
       POSTGRES_PORT: 5432
-      REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
-      FLASK_ENV: ${FLASK_ENV}
+      PYTHONPATH: /app
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
       - ./web:/app
-      # Монтируем парсеры, чтобы веб-сервер тоже мог их видеть (если нужно)
       - ./parsers:/app/parsers
     depends_on:
       db:
@@ -79,15 +66,11 @@ services:
       - scraper_network
     restart: unless-stopped
 
-  # ---------------------------------------------------------------------------
-  # Celery Worker (выполняет задачи парсинга)
-  # ---------------------------------------------------------------------------
   celery_worker:
     build:
       context: ./web
       dockerfile: Dockerfile
     container_name: scraper_celery_worker
-    # Запускаем воркер. Убедись, что tasks.py лежит в /app (внутри контейнера)
     command: celery -A tasks worker --loglevel=info
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -97,11 +80,9 @@ services:
       POSTGRES_PORT: 5432
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
-      # Добавляем путь к корню, чтобы импорт "from parsers..." работал корректно
       PYTHONPATH: /app
     volumes:
       - ./web:/app
-      # Важно: монтируем папку parsers внутрь контейнера, чтобы воркер видел код
       - ./parsers:/app/parsers
     depends_on:
       db:
@@ -112,15 +93,12 @@ services:
       - scraper_network
     restart: unless-stopped
 
-  # ---------------------------------------------------------------------------
-  # Flower (мониторинг задач Celery)
-  # ---------------------------------------------------------------------------
   flower:
     build:
       context: ./web
       dockerfile: Dockerfile
     container_name: scraper_flower
-    command: celery -A tasks flower --port=5555
+    command: celery -A tasks flower --port=5555 --address=0.0.0.0
     environment:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
@@ -132,6 +110,27 @@ services:
     networks:
       - scraper_network
     restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: scraper_dashboard
+    command: streamlit run dashboard.py --server.address 0.0.0.0 --server.port 8501
+    environment:
+      API_BASE: http://web:8000
+      PYTHONPATH: /app
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./web:/app
+    depends_on:
+      - web
+    networks:
+      - scraper_network
+    restart: unless-stopped
+
+
 
 networks:
   scraper_network:

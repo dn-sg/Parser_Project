@@ -8,3 +8,6 @@ pg8000
 python-dotenv
 fastapi
 uvicorn
+streamlit
+pandas
+plotly
