@@ -6,7 +6,6 @@ from bs4 import BeautifulSoup
 from typing import List, Dict
 import re
 import logging
-import json
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -42,7 +41,7 @@ class DohodParser(BaseParser):
             if not table:
                 tables = soup.find_all('table')
                 for t in tables:
-                    if t.find('th', text=re.compile('Акция|Ticker|Symbol')):
+                    if t.find('th', string=re.compile('Акция|Ticker|Symbol')):
                         table = t
                         break
 
