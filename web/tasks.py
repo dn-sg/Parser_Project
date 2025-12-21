@@ -1,10 +1,15 @@
+"""
+Celery задачи для парсинга
+Использует SQLAlchemy вместо RAW SQL
+"""
 import os
-import time
-
-import pg8000.dbapi
 from celery import Celery
 from celery.utils.log import get_task_logger
-
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from infra.database import get_db_session
+from models.log import Log
+from models.source import Source
 from parsers.smartlab import run_smartlab_parser
 from parsers.rbc import run_rbc_parser
 from parsers.dohod import run_dohod_parser
@@ -15,59 +20,49 @@ redis_url = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 celery = Celery("tasks", broker=redis_url, backend=redis_url)
 
 
-def _get_conn():
-    return pg8000.dbapi.connect(
-        user=os.getenv("POSTGRES_USER"),
-        password=os.getenv("POSTGRES_PASSWORD"),
-        host=os.getenv("POSTGRES_HOST", "db"),
-        port=int(os.getenv("POSTGRES_PORT", "5432")),
-        database=os.getenv("POSTGRES_DB"),
-    )
-
-
-def _get_source_id(cur, source_name: str) -> int:
-    cur.execute("SELECT id FROM source WHERE name = %s LIMIT 1;", (source_name,))
-    row = cur.fetchone()
-    if not row:
+def _get_source_id(session, source_name: str) -> int:
+    """Получение ID источника через SQLAlchemy"""
+    source = session.query(Source).filter(Source.name == source_name).first()
+    if not source:
         raise RuntimeError(f"Source '{source_name}' not found in table source")
-    return row[0]
+    return source.id
 
 
 def _log_started(source_name: str, celery_task_id: str) -> int:
-    conn = _get_conn()
-    cur = conn.cursor()
-
-    source_id = _get_source_id(cur, source_name)
-    cur.execute(
-        """
-        INSERT INTO logs (source_id, celery_task_id, status, started_at)
-        VALUES (%s, %s, %s, NOW())
-        RETURNING id;
-        """,
-        (source_id, celery_task_id, "STARTED"),
-    )
-    log_id = cur.fetchone()[0]
-    conn.commit()
-    conn.close()
-    return log_id
+    """Логирование начала задачи через SQLAlchemy"""
+    with get_db_session() as session:
+        source_id = _get_source_id(session, source_name)
+        from datetime import datetime
+        log = Log(
+            source_id=source_id,
+            celery_task_id=celery_task_id,
+            status="STARTED",
+            started_at=datetime.utcnow()
+        )
+        session.add(log)
+        session.commit()
+        session.refresh(log)
+        return log.id
 
 
 def _log_finished(log_id: int, status: str, error_message: str | None = None):
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        UPDATE logs
-        SET status = %s,
-            error_message = %s,
-            finished_at = NOW(),
-            duration_seconds = EXTRACT(EPOCH FROM (NOW() - started_at))::int
-        WHERE id = %s;
-        """,
-        (status, error_message, log_id),
-    )
-    conn.commit()
-    conn.close()
+    """Логирование завершения задачи через SQLAlchemy"""
+    with get_db_session() as session:
+        log = session.query(Log).filter(Log.id == log_id).first()
+        if not log:
+            logger.error(f"Log with id {log_id} not found")
+            return
+        
+        from datetime import datetime
+        log.status = status
+        log.error_message = error_message
+        log.finished_at = datetime.utcnow()
+        
+        if log.started_at:
+            duration = (log.finished_at - log.started_at).total_seconds()
+            log.duration_seconds = int(duration)
+        
+        session.commit()
 
 
 @celery.task(bind=True, name="parse_smartlab")
