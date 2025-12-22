@@ -21,8 +21,7 @@ def _get_conn():
         password=os.getenv("POSTGRES_PASSWORD"),
         host=os.getenv("POSTGRES_HOST", "db"),
         port=int(os.getenv("POSTGRES_PORT", "5432")),
-        database=os.getenv("POSTGRES_DB"),
-    )
+        database=os.getenv("POSTGRES_DB"))
 
 
 def _get_source_id(cur, source_name: str) -> int:

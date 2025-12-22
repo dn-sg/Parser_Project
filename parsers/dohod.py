@@ -3,159 +3,186 @@
 """
 from .base_parser import BaseParser
 from bs4 import BeautifulSoup
-from typing import List, Dict
+from typing import List, Dict, Optional
 import re
 import logging
 from datetime import datetime
+import json
+
 
 logger = logging.getLogger(__name__)
-class DohodParser(BaseParser):
-    """
-    Парсер страницы дивидендов Dohod.ru
-    URL: https://www.dohod.ru/ik/analytics/dividend
-    """
 
+CURRENCY_RE = re.compile(r"^(RUB|USD|EUR|CNY|HKD|GBP)$", re.IGNORECASE)
+
+class DohodParser(BaseParser):
     def __init__(self):
         super().__init__("https://www.dohod.ru/ik/analytics/dividend")
 
     def parse(self) -> List[Dict]:
-        """
-        Парсинг таблицы с дивидендами.
-
-        Returns:
-            Список словарей, где каждый словарь — это строка таблицы.
-        """
         html = self.fetch_html()
         if not html:
             return []
 
         soup = BeautifulSoup(html, "html.parser")
-        data_list = []
-
-        try:
-            # Ищем основную таблицу с данными
-            # Часто она не имеет ID, поэтому ищем по характерным заголовкам или просто первую большую таблицу
-            table = soup.find('table', {'id': 'table-dividend'})
-
-            # Если по ID не нашли, ищем по классу content-table или просто первую таблицу
-            if not table:
-                tables = soup.find_all('table')
-                for t in tables:
-                    if t.find('th', string=re.compile('Акция|Ticker|Symbol')):
-                        table = t
-                        break
-
-            if not table:
-                logger.error("Таблица с дивидендами не найдена")
-                return []
-
-            # Проходим по строкам тела таблицы
-            # tbody может отсутствовать в верстке, поэтому ищем tr внутри table
-            rows = table.find_all('tr')
-
-            # Пропускаем заголовки (обычно первые 1-2 строки)
-            # Фильтруем строки, которые являются заголовками или фильтрами
-            data_rows = [row for row in rows if not row.find('th') and 'filter-row' not in row.get('class', [])]
-
-            for row in data_rows:
-                cells = row.find_all('td')
-
-                # Пропускаем строки, где мало ячеек (например, разделители)
-                if len(cells) < 8:
-                    continue
-
-                try:
-                    # Извлечение данных по колонкам (индексы могут меняться, если сайт обновится)
-                    # 0: Иконка (пропускаем)
-                    # 1: Название акции (ссылка)
-                    name_link = cells[0].find('a')
-                    if not name_link:
-                         # Иногда первая ячейка с плюсиком, тогда смещаемся
-                         name_link = cells[1].find('a')
-
-                    ticker = ""
-                    company_name = name_link.get_text(strip=True) if name_link else ""
-
-                    # Пытаемся вытащить тикер из ссылки (обычно .../dividend/ticker)
-                    if name_link and 'href' in name_link.attrs:
-                        href_parts = name_link['href'].split('/')
-                        if href_parts:
-                            ticker = href_parts[-1].upper()
-
-                    # Собираем остальные поля, очищая от лишних пробелов и символов
-                    sector = self._get_text(cells, 2)
-                    period = self._get_text(cells, 3)
-
-                    payment_val = self._parse_float(self._get_text(cells, 4))
-                    currency = self._get_text(cells, 5)
-
-                    yield_percent = self._parse_percent(self._get_text(cells, 6))
-
-                    # Дата закрытия реестра
-                    record_date_raw = self._get_text(cells, 8)
-                    record_date = self._parse_date(record_date_raw)
-
-                    # Капитализация
-                    capitalization = self._parse_float(self._get_text(cells, 9).replace(' ', ''))
-
-                    dsi_index = self._parse_float(self._get_text(cells, 10))
-
-                    item = {
-                        "ticker": ticker,
-                        "company_name": company_name,
-                        "sector": sector,
-                        "period": period,
-                        "payment_per_share": payment_val,
-                        "currency": currency,
-                        "yield_percent": yield_percent,
-                        "record_date_estimate": record_date,
-                        "capitalization_mln_rub": capitalization,
-                        "dsi": dsi_index
-                    }
-
-                    data_list.append(item)
-
-                except Exception as e:
-                    # Логируем ошибку, но не роняем весь парсер из-за одной строки
-                    continue
-
-        except Exception as e:
-            logger.error(f"Критическая ошибка парсинга Dohod: {e}", exc_info=True)
+        table = soup.find("table", {"id": "table-dividend"})
+        if not table:
+            logger.error("Таблица table-dividend не найдена")
             return []
+
+        # 1) Заголовки -> индексы колонок (учитывая скрытые/тех. th)
+        headers = [th.get_text(" ", strip=True) for th in table.select("thead th")]
+        if not headers:
+            logger.error("Не найдены заголовки таблицы (thead th)")
+            return []
+
+        def find_col(patterns: List[str]) -> Optional[int]:
+            for i, h in enumerate(headers):
+                hh = (h or "").lower()
+                for p in patterns:
+                    if re.search(p, hh):
+                        return i
+            return None
+
+        col_name = find_col([r"\bакция\b"])
+        col_sector = find_col([r"\bсектор\b"])
+        col_period = find_col([r"\bпериод\b"])
+        col_payment = find_col([r"\bвыплата\b"])
+        col_yield = find_col([r"\bдоходност"])
+        col_record_date = find_col([r"\bдата\b.*\bреестр", r"\bзакрытия\b"])
+        col_cap = find_col([r"\bкапитализац"])
+        col_dsi = find_col([r"\bdsi\b"])
+
+        required = {
+            "name": col_name,
+            "sector": col_sector,
+            "period": col_period,
+            "payment": col_payment,
+            "yield": col_yield,
+            "record_date": col_record_date,
+            "cap": col_cap,
+            "dsi": col_dsi,
+        }
+        if any(v is None for v in required.values()):
+            logger.error(f"Не удалось сопоставить колонки по заголовкам: {required}")
+            return []
+
+        # Валюта обычно стоит сразу после "Выплата..."
+        col_currency = None
+        if col_payment is not None and col_payment + 1 < len(headers):
+            col_currency = col_payment + 1
+
+        # ... после расчёта col_* и required ...
+
+        max_needed_idx = max(col_name, col_sector, col_period, col_payment, col_yield, col_record_date, col_cap,
+                             col_dsi)
+
+        data_list: List[Dict] = []
+        tbody = table.find("tbody") or table
+
+        for row in tbody.find_all("tr"):
+            cells = row.find_all("td")  # <- без recursive=False, так надёжнее
+
+            # пропускаем “не-данные”
+            if len(cells) <= max_needed_idx:
+                continue
+
+            name_cell = cells[col_name]
+            link = name_cell.find("a", href=True)
+            company_name = link.get_text(strip=True) if link else name_cell.get_text(" ", strip=True)
+
+            ticker = ""
+            if link and link.get("href"):
+                ticker = link["href"].rstrip("/").split("/")[-1].upper()
+
+            sector = cells[col_sector].get_text(" ", strip=True)
+            period = cells[col_period].get_text(" ", strip=True)
+
+            payment_raw = cells[col_payment].get_text(" ", strip=True)
+            payment_val = self._parse_float(payment_raw)
+
+            # Валюта: ищем в следующих 1–3 ячейках после выплаты (на сайте бывает “пустая” колонка между ними)
+            currency = ""
+            for j in range(col_payment + 1, min(col_payment + 4, len(cells))):
+                cur = cells[j].get_text(" ", strip=True).upper()
+                if CURRENCY_RE.match(cur):
+                    currency = cur
+                    break
+
+            yield_raw = cells[col_yield].get_text(" ", strip=True)
+            yield_percent = self._parse_percent(yield_raw)
+
+            record_date_raw = cells[col_record_date].get_text(" ", strip=True)
+            record_date = self._parse_date(record_date_raw)
+
+            cap_raw = cells[col_cap].get_text(" ", strip=True)
+            capitalization = self._parse_float(cap_raw)
+
+            dsi_raw = cells[col_dsi].get_text(" ", strip=True)
+            dsi_index = self._parse_float(dsi_raw)
+
+            data_list.append({
+                "ticker": ticker,
+                "company_name": company_name,
+                "sector": sector,
+                "period": period,
+                "payment_per_share": payment_val,
+                "currency": currency,
+                "yield_percent": yield_percent,
+                "record_date_estimate": record_date,
+                "capitalization_mln_rub": capitalization,
+                "dsi": dsi_index,
+            })
 
         return data_list
 
-    def _get_text(self, cells, index):
-        """Безопасное получение текста из ячейки"""
-        if index < len(cells):
-            return cells[index].get_text(strip=True)
-        return ""
-
-    def _parse_float(self, text):
-        """Преобразование строки в float"""
-        try:
-            clean_text = re.sub(r'[^\d.,-]', '', text).replace(',', '.')
-            return float(clean_text) if clean_text else 0.0
-        except:
-            return 0.0
-
-    def _parse_percent(self, text):
-        """Преобразование строки с процентом в float"""
-        try:
-            clean_text = text.replace('%', '').replace(',', '.').strip()
-            return float(clean_text) if clean_text else 0.0
-        except:
-            return 0.0
-
-    def _parse_date(self, text: str):
-        """Конвертация DD.MM.YYYY -> Python date object"""
+    def _parse_float(self, text: str) -> Optional[float]:
         if not text:
             return None
-        # Проверка паттерна
-        if not re.match(r'\d{2}\.\d{2}\.\d{4}', text):
+        t = text.strip().lower()
+        if t in {"n/a", "na", "-", "—"}:
+            return None
+
+        # берём первое “похожее на число” в строке, чтобы не ломаться от иконок/пометок
+        m = re.search(r"-?\d+(?:[ \u00A0\u202F]\d{3})*(?:[.,]\d+)?", text.replace("−", "-"))
+        if not m:
+            return None
+
+        num = m.group(0)
+        num = num.replace(" ", "").replace("\u00A0", "").replace("\u202F", "").replace(",", ".")
+        try:
+            return float(num)
+        except ValueError:
+            return None
+
+    def _parse_percent(self, text: str) -> Optional[float]:
+        if not text:
+            return None
+        t = text.strip().lower()
+        if t in {"n/a", "na", "-", "—"}:
+            return None
+
+        m = re.search(r"-?\d+(?:[.,]\d+)?", text.replace("−", "-"))
+        if not m:
+            return None
+
+        num = m.group(0).replace(",", ".")
+        try:
+            return float(num)
+        except ValueError:
+            return None
+
+    def _parse_date(self, text: str):
+        if not text:
+            return None
+        # “n/a” и т.п.
+        if text.strip().lower() in {"n/a", "na", "-", "—"}:
+            return None
+
+        m = re.search(r"\b\d{2}\.\d{2}\.\d{4}\b", text)
+        if not m:
             return None
         try:
-            return datetime.strptime(text, "%d.%m.%Y").date()
+            return datetime.strptime(m.group(0), "%d.%m.%Y").date()
         except ValueError:
             return None
 
@@ -234,7 +261,7 @@ def run_dohod_parser():
             # Сохраняем в БД
             parser.save_to_db(data)
 
-            # # Сохраняем в JSON (для дебага, сериализуем даты как строки)
+            # Сохраняем в JSON (для дебага, сериализуем даты как строки)
             # def date_handler(obj):
             #     if hasattr(obj, 'isoformat'):
             #         return obj.isoformat()

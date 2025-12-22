@@ -253,3 +253,19 @@ def rbc_news_one(news_id: int):
         "text": row[3],
         "parsed_at": row[4],
     }
+
+
+@app.get("/api/data/smartlab/history")
+def smartlab_history(ticker: str, limit: int = 50000):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT parsed_at, last_price_rub
+        FROM smartlab_stocks
+        WHERE ticker = %s AND last_price_rub IS NOT NULL
+        ORDER BY parsed_at ASC, id ASC
+        LIMIT %s;
+    """, (ticker, limit))
+    rows = cur.fetchall()
+    conn.close()
+    return [{"parsed_at": r[0], "last_price_rub": float(r[1])} for r in rows]

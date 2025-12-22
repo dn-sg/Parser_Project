@@ -1,6 +1,7 @@
 celery
 redis
 flask
+flower
 gunicorn
 beautifulsoup4
 requests
