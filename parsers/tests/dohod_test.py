@@ -75,20 +75,20 @@ def test_parse_success(parser):
     """
 
     # Подменяем метод fetch_html, чтобы он не лез в интернет, а возвращал нашу строку
-    with patch.object(parser, 'fetch_html', return_value=mock_html):
+    with patch.object(parser, "fetch_html", return_value=mock_html):
         result = parser.parse()
 
         assert len(result) == 1
         item = result[0]
 
-        assert item['ticker'] == "LKOH"
-        assert item['company_name'] == "ЛУКОЙЛ"
-        assert item['sector'] == "Нефтегаз"
-        assert item['payment_per_share'] == 500.5
-        assert item['yield_percent'] == 10.5
-        assert item['record_date_estimate'] == date(2025, 12, 20)
-        assert item['capitalization_mln_rub'] == 1000000.0
-        assert item['dsi'] == 0.85
+        assert item["ticker"] == "LKOH"
+        assert item["company_name"] == "ЛУКОЙЛ"
+        assert item["sector"] == "Нефтегаз"
+        assert item["payment_per_share"] == 500.5
+        assert item["yield_percent"] == 10.5
+        assert item["record_date_estimate"] == date(2025, 12, 20)
+        assert item["capitalization_mln_rub"] == 1000000.0
+        assert item["dsi"] == 0.85
 
 
 def test_parse_no_table(parser):
@@ -114,10 +114,10 @@ def test_parse_bad_row(parser):
         </tr>
     </table>
     """
-    with patch.object(parser, 'fetch_html', return_value=mock_html):
+    with patch.object(parser, "fetch_html", return_value=mock_html):
         result = parser.parse()
         assert len(result) == 1
-        assert result[0]['ticker'] == 'TEST'
+        assert result[0]["ticker"] == "TEST"
 
 
 # --- Тест сохранения в БД (Mocking Database) ---
