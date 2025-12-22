@@ -57,10 +57,6 @@ services:
     volumes:
       - ./web:/app
       - ./parsers:/app/parsers
-      - ./models:/app/models
-      - ./commands:/app/commands
-      - ./adapters:/app/adapters
-      - ./infra:/app/infra
     depends_on:
       db:
         condition: service_healthy
@@ -88,10 +84,6 @@ services:
     volumes:
       - ./web:/app
       - ./parsers:/app/parsers
-      - ./models:/app/models
-      - ./commands:/app/commands
-      - ./adapters:/app/adapters
-      - ./infra:/app/infra
     depends_on:
       db:
         condition: service_healthy

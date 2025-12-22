@@ -12,7 +12,3 @@ streamlit
 pandas
 plotly
 pytest
-sqlalchemy
-asyncpg
-pydantic-settings
-pytest-cov
