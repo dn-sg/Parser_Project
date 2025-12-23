@@ -20,8 +20,7 @@ class Source(Base):
     url = Column(String(255), unique=True, nullable=False)
     name = Column(String(100), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
+
     logs = relationship("Log", back_populates="source")
     rbc_news = relationship("RBCNews", back_populates="source")
     smartlab_stocks = relationship("SmartlabStock", back_populates="source")
@@ -42,8 +41,7 @@ class Log(Base):
     started_at = Column(DateTime)
     finished_at = Column(DateTime)
     duration_seconds = Column(Integer)
-    
-    # Relationships
+
     source = relationship("Source", back_populates="logs")
     
     __table_args__ = (
@@ -61,8 +59,7 @@ class RBCNews(Base):
     url = Column(Text, unique=True)
     text = Column(Text)
     parsed_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
+
     source = relationship("Source", back_populates="rbc_news")
     
     __table_args__ = (
@@ -88,8 +85,7 @@ class SmartlabStock(Base):
     capitalization_bln_rub = Column(Numeric(20, 2))
     capitalization_bln_usd = Column(Numeric(20, 2))
     parsed_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
+
     source = relationship("Source", back_populates="smartlab_stocks")
     
     __table_args__ = (
@@ -114,11 +110,9 @@ class DohodDiv(Base):
     capitalization_mln_rub = Column(Numeric(20, 2))
     dsi = Column(Numeric(10, 2))
     parsed_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
+
     source = relationship("Source", back_populates="dohod_divs")
     
     __table_args__ = (
         Index("idx_dohod_ticker", "ticker"),
     )
-

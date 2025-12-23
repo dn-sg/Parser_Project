@@ -101,7 +101,6 @@ class SmartlabParser(BaseParser):
                 logger.warning(msg="Таблица пуста - не найдено строк")
                 return []
 
-            # Пропускаем заголовок (первую строку)
             for row in rows[1:]:
                 try:
                     company_data: Dict[str, str] = COMPANY_TEMPLATE.copy()
@@ -184,9 +183,7 @@ class SmartlabParser(BaseParser):
         if not value or value == "No information!":
             return 0.0
 
-        # Убираем пробелы (разделители тысяч) и знаки % и +
         clean_val = value.replace(" ", "").replace("%", "").replace("+", "")
-        # Если есть запятая, меняем на точку (хотя на smartlab обычно точки)
         clean_val = clean_val.replace(",", ".")
 
         try:
@@ -203,17 +200,17 @@ class SmartlabParser(BaseParser):
         session = None
         try:
             session = self._get_db_session()
-            # 1. Получаем источник (SmartLab)
+            # Получаю источник
             source = self._get_source_by_name(session, "SmartLab")
             if not source:
                 logger.error("Ошибка: Источник 'SmartLab' не найден в таблице source.")
                 return
 
-            # 2. Импортируем модель
+            # Импортирую модель
             from src.database import SmartlabStock
             from decimal import Decimal
 
-            # 3. Вставляем данные
+            # Вставляю данные
             for item in data:
                 stock = SmartlabStock(
                     source_id=source.id,
@@ -260,20 +257,14 @@ def run_smartlab_parser():
     try:
         parser: SmartlabParser = SmartlabParser(url=URL, headers=HEADERS)
 
-        # 1. Парсинг (получаем список словарей)
+        # Парсинг
         logger.info("Начинаем парсинг...")
         data_list = parser.parse()
 
         if data_list:
-            # 2. Сохранение в БД
+            # Сохранение в БД
             logger.info("Сохраняем данные в БД...")
             parser.save_to_db(data_list)
-
-            # 3. Сохранение в JSON-файл
-            # logger.info("Сохраняем данные в smartlab_stocks.json...")
-            # json_str = parser.to_json(data_list)
-            # with open(file="smartlab_stocks.json", mode="w", encoding="utf-8") as file:
-            #     file.write(json_str)
 
             logger.info("Все операции завершены успешно.")
         else:

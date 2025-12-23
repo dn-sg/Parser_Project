@@ -62,7 +62,7 @@ class BaseParser:
         """
         return json.dumps(data, ensure_ascii=False, indent=2)
 
-    # --- Подключение к БД через SQLAlchemy ---
+    # Подключение к БД
     def _get_db_session(self) -> Session:
         """Создает сессию SQLAlchemy для работы с БД"""
         return get_sync_session()
@@ -84,4 +84,3 @@ class BaseParser:
         """
         data = self.parse()
         return self.to_json(data)
-

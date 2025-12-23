@@ -1,4 +1,4 @@
--- Таблица источников (оставляем общую, чтобы ссылаться на source_id)
+-- Таблица источников
 CREATE TABLE IF NOT EXISTS source (
     id SERIAL PRIMARY KEY,
     url VARCHAR(255) UNIQUE NOT NULL,
@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS source (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Таблица логов (общая для всех парсеров)
+-- Таблица логов
 CREATE TABLE IF NOT EXISTS logs (
     id SERIAL PRIMARY KEY,
     source_id INT NOT NULL,
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS logs (
     FOREIGN KEY (source_id) REFERENCES source(id)
 );
 
--- 1. Таблица для дивидендов Dohod
+-- Таблица для Dohod
 CREATE TABLE IF NOT EXISTS dohod_divs (
     id SERIAL PRIMARY KEY,
     source_id INT NOT NULL,
@@ -39,21 +39,18 @@ CREATE TABLE IF NOT EXISTS dohod_divs (
     FOREIGN KEY (source_id) REFERENCES source(id)
 );
 
--- 2. Таблица для новостей RBC
+-- Таблица для RBC
 CREATE TABLE IF NOT EXISTS rbc_news (
     id SERIAL PRIMARY KEY,
     source_id INT NOT NULL,
     title TEXT,
-    url TEXT UNIQUE,  -- UNIQUE, чтобы не дублировать новости по ссылке
+    url TEXT UNIQUE,
     text TEXT,
     parsed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (source_id) REFERENCES source(id)
 );
 
--- 3. Таблица для акций SmartLab
--- Данные приходят строками ("2 774.23", "+0.92%"), лучше хранить числами.
--- Я сделал поля DECIMAL/BIGINT, парсер должен будет их чистить перед вставкой.
--- Если лень чистить в парсере — меняй на VARCHAR.
+-- Таблица для SmartLab
 CREATE TABLE IF NOT EXISTS smartlab_stocks (
     id SERIAL PRIMARY KEY,
     source_id INT NOT NULL,

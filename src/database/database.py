@@ -9,7 +9,7 @@ import os
 
 from src.database.models import Base
 
-# Ленивая инициализация движков (только при необходимости)
+# Инициализация движков
 _async_engine: Optional[object] = None
 _sync_engine: Optional[object] = None
 
@@ -41,7 +41,6 @@ def get_sync_engine():
     global _sync_engine
     if _sync_engine is None:
         config = _get_config()
-        # Используем pg8000 для синхронных подключений
         _sync_engine = create_engine(
             config.DATABASE_URL,
             echo=False,
@@ -51,7 +50,7 @@ def get_sync_engine():
         )
     return _sync_engine
 
-# Фабрики сессий (инициализируются при первом использовании)
+# Фабрики сессий
 _AsyncSessionLocal: Optional[async_sessionmaker] = None
 _SessionLocal: Optional[sessionmaker] = None
 

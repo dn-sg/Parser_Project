@@ -11,18 +11,18 @@ class Config(BaseSettings):
     
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 
-    # PostgreSQL settings
+    # PostgreSQL
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
     POSTGRES_HOST: str = "db"
     POSTGRES_PORT: int = 5432
 
-    # Redis/Celery settings
+    # Redis/Celery
     CELERY_BROKER_URL: str = "redis://redis:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://redis:6379/0"
 
-    # Database URLs
+    # Database
     DATABASE_URL: str = ""
     ASYNC_DATABASE_URL: str = ""
 
@@ -30,15 +30,13 @@ class Config(BaseSettings):
     DOCKERHUB_USERNAME: str = "dn_sg"
     DOCKERHUB_TOKEN: str = ""
 
-    # API settings
+    # API
     API_PORT: int = 8000
     FLOWER_PORT: int = 5555
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # Build database URLs if not provided
         if not self.DATABASE_URL:
-            # Используем pg8000 для синхронных подключений
             self.DATABASE_URL = (
                 f"postgresql+pg8000://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
                 f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
@@ -50,6 +48,5 @@ class Config(BaseSettings):
             )
 
 
-# Global config instance
 config = Config()
 

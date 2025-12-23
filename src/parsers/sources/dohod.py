@@ -26,7 +26,7 @@ class DohodParser(BaseParser):
 
         soup = BeautifulSoup(html, "html.parser")
 
-        # 1) таблица по id, иначе fallback: первая table, где есть th "Ticker"
+        # таблица по id
         table = soup.find("table", {"id": "table-dividend"})
         if not table:
             for t in soup.find_all("table"):
@@ -39,11 +39,9 @@ class DohodParser(BaseParser):
             logger.error("Таблица table-dividend не найдена")
             return []
 
-        # 2) определяем "тело" таблицы
+        # определяю тело таблицы
         tbody = table.find("tbody") or table
 
-        # 3) если есть строка заголовков (th) внутри table (без thead) — пропустим её
-        #    (в тестах она идёт первой строкой)
         data_rows = tbody.find_all("tr")
         if data_rows and data_rows[0].find_all("th"):
             data_rows = data_rows[1:]
@@ -51,19 +49,14 @@ class DohodParser(BaseParser):
         data_list: List[Dict] = []
 
         for row in data_rows:
-            # пропускаем filter-row из теста
             cls = row.get("class") or []
             if "filter-row" in cls:
                 continue
 
             cells = row.find_all("td")
-            # в тестах "правильная" строка = 11 td
             if len(cells) < 11:
                 continue
 
-            # Фиксированная схема из тестов:
-            # 0 ticker/link, 1 name, 2 sector, 3 period, 4 payment, 5 currency,
-            # 6 yield, 8 record date, 9 cap, 10 dsi
             ticker_cell = cells[0]
             name_cell = cells[1] if len(cells) > 1 else cells[0]
 
@@ -108,7 +101,6 @@ class DohodParser(BaseParser):
         return data_list
 
     def _parse_float(self, text: str) -> float:
-        # тесты хотят 0.0 на мусор
         if text is None:
             return 0.0
         t = text.strip()
@@ -171,7 +163,7 @@ class DohodParser(BaseParser):
         session = None
         try:
             session = self._get_db_session()
-            # 1. Получаем источник (Dohod или dohod.ru)
+            # Получаю источник
             source = session.query(Source).filter(
                 (Source.name == "Dohod") | (Source.name == "dohod.ru")
             ).first()
@@ -180,11 +172,11 @@ class DohodParser(BaseParser):
                 logger.error("Источник 'Dohod' не найден в БД. Проверь таблицу source.")
                 return
 
-            # 2. Импортируем модель
+            # Импортирую модель
             from src.database import DohodDiv
             from decimal import Decimal
 
-            # 3. Вставляем данные
+            # Вставляю данные
             for item in data:
                 div = DohodDiv(
                     source_id=source.id,
@@ -226,17 +218,8 @@ def run_dohod_parser():
         if data:
             logger.info(f"Спарсено {len(data)} записей.")
 
-            # Сохраняем в БД
+            # Сохраняю в БД
             parser.save_to_db(data)
-
-            # Сохраняем в JSON (для дебага, сериализуем даты как строки)
-            # def date_handler(obj):
-            #     if hasattr(obj, 'isoformat'):
-            #         return obj.isoformat()
-            #     return obj
-            #
-            # with open("dohod_divs.json", "w", encoding="utf-8") as f:
-            #     json.dump(data, f, ensure_ascii=False, indent=2, default=date_handler)
 
             logger.info("Готово.")
         else:
