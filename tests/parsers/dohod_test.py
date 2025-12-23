@@ -235,3 +235,114 @@ def test_save_to_db_rollback(parser):
         # Проверяем, что был вызван rollback
         mock_conn.rollback.assert_called_once()
 
+
+# --- Дополнительные тесты для увеличения покрытия ---
+
+
+def test_run_dohod_parser_success():
+    """Тест успешного сценария run_dohod_parser"""
+    from src.parsers.sources import dohod
+    
+    with patch.object(dohod, "logging") as mock_logging, patch.object(
+        dohod, "DohodParser"
+    ) as mock_cls:
+        parser_instance = MagicMock()
+        parser_instance.parse.return_value = [{"ticker": "OK"}]
+        parser_instance.save_to_db.return_value = None
+        mock_cls.return_value = parser_instance
+        
+        dohod.run_dohod_parser()
+        
+        mock_logging.basicConfig.assert_called_once()
+        mock_cls.assert_called_once()
+        parser_instance.parse.assert_called_once()
+        parser_instance.save_to_db.assert_called_once()
+
+
+def test_run_dohod_parser_empty_data():
+    """Тест run_dohod_parser с пустым списком данных"""
+    from src.parsers.sources import dohod
+    
+    with patch.object(dohod, "logging") as mock_logging, patch.object(
+        dohod, "DohodParser"
+    ) as mock_cls:
+        parser_instance = MagicMock()
+        parser_instance.parse.return_value = []
+        mock_cls.return_value = parser_instance
+        
+        with patch.object(dohod.logger, "warning") as mock_warning:
+            dohod.run_dohod_parser()
+            mock_warning.assert_called()
+
+
+def test_run_dohod_parser_handles_exception():
+    """Тест обработки исключения внутри run_dohod_parser"""
+    from src.parsers.sources import dohod
+    
+    with patch.object(dohod, "logging") as mock_logging, patch.object(
+        dohod, "DohodParser"
+    ) as mock_cls:
+        parser_instance = MagicMock()
+        parser_instance.parse.side_effect = RuntimeError("boom")
+        mock_cls.return_value = parser_instance
+        
+        with patch.object(dohod.logger, "error") as mock_error:
+            dohod.run_dohod_parser()
+            mock_error.assert_called()
+
+
+def test_save_to_db_multiple_items(parser):
+    """Тест сохранения нескольких записей"""
+    fake_data = [
+        {"ticker": "TEST1", "company_name": "T1", "sector": "S", "period": "P",
+         "payment_per_share": 1, "currency": "R", "yield_percent": 1,
+         "record_date_estimate": date.today(), "capitalization_mln_rub": 1, "dsi": 1},
+        {"ticker": "TEST2", "company_name": "T2", "sector": "S", "period": "P",
+         "payment_per_share": 2, "currency": "R", "yield_percent": 2,
+         "record_date_estimate": date.today(), "capitalization_mln_rub": 2, "dsi": 2},
+    ]
+    
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = [1]
+    
+    with patch.object(parser, '_get_db_connection', return_value=mock_conn):
+        parser.save_to_db(fake_data)
+        
+        # Должен быть 1 SELECT + 2 INSERT = 3 вызова execute
+        assert mock_cursor.execute.call_count == 3
+        mock_conn.commit.assert_called_once()
+
+
+def test_save_to_db_connection_error(parser):
+    """Тест обработки ошибки подключения к БД"""
+    fake_data = [{"ticker": "TEST", "company_name": "T", "sector": "S", "period": "P",
+                  "payment_per_share": 1, "currency": "R", "yield_percent": 1,
+                  "record_date_estimate": date.today(), "capitalization_mln_rub": 1, "dsi": 1}]
+    
+    with patch.object(parser, '_get_db_connection', side_effect=Exception("Connection error")):
+        # Не должно быть исключения, только логирование
+        parser.save_to_db(fake_data)
+
+
+def test_save_to_db_close_error(parser):
+    """Тест обработки ошибки при закрытии соединения"""
+    fake_data = [{"ticker": "TEST", "company_name": "T", "sector": "S", "period": "P",
+                  "payment_per_share": 1, "currency": "R", "yield_percent": 1,
+                  "record_date_estimate": date.today(), "capitalization_mln_rub": 1, "dsi": 1}]
+    
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = [1]
+    mock_conn.close.side_effect = Exception("Close error")
+    
+    with patch.object(parser, '_get_db_connection', return_value=mock_conn):
+        try:
+            parser.save_to_db(fake_data)
+        except Exception:
+            pass  # Ожидаемое исключение при close
+        
+        mock_conn.commit.assert_called_once()
+

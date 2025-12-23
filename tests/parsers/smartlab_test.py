@@ -466,3 +466,344 @@ def test_save_to_db_cleans_numbers(parser):
         # Проверяем, что execute был вызван с очищенными числами
         # Последний вызов execute должен быть INSERT с float значениями
         assert mock_cursor.execute.call_count >= 2
+
+
+# --- Дополнительные тесты для увеличения покрытия ---
+
+
+def test_extract_cell_text_without_class_name(parser):
+    """Тест извлечения текста без указания класса"""
+    html = "<tr><td>Текст без класса</td></tr>"
+    soup = BeautifulSoup(html, "html.parser")
+    row = soup.find("tr")
+
+    text = parser._extract_cell_text(row, "td")
+    assert text == "Текст без класса"
+
+
+def test_extract_cell_text_type_error(parser):
+    """Тест обработки TypeError при извлечении текста"""
+    # Создаем объект, который вызовет TypeError при вызове find
+    class BadRow:
+        def find(self, *args, **kwargs):
+            raise TypeError("Bad type")
+
+    bad_row = BadRow()
+    text = parser._extract_cell_text(bad_row, "td", "test")
+    assert text == "No information!"
+
+
+def test_extract_cell_text_attribute_error_in_get_text(parser):
+    """Тест обработки AttributeError при get_text"""
+    html = "<tr><td class='test'>Текст</td></tr>"
+    soup = BeautifulSoup(html, "html.parser")
+    row = soup.find("tr")
+    
+    # Мокаем cell.get_text чтобы вызвать AttributeError
+    cell = row.find("td", class_="test")
+    with patch.object(cell, "get_text", side_effect=AttributeError("No get_text")):
+        text = parser._extract_cell_text(row, "td", "test")
+        assert text == "No information!"
+
+
+def test_clean_number_negative_with_spaces(parser):
+    """Тест очистки отрицательного числа с пробелами"""
+    assert parser._clean_number("-1 234.56") == -1234.56
+    assert parser._clean_number("- 50.5") == -50.5
+
+
+def test_clean_number_multiple_operations(parser):
+    """Тест очистки числа с несколькими операциями"""
+    assert parser._clean_number("+1 234.56%") == 1234.56
+    assert parser._clean_number("-50.5%") == -50.5
+    # Запятая заменяется на точку, но если уже есть точка, то будет ошибка парсинга
+    assert parser._clean_number("1,234") == 1.234
+
+
+def test_clean_number_zero(parser):
+    """Тест обработки нуля"""
+    assert parser._clean_number("0") == 0.0
+    assert parser._clean_number("0.0") == 0.0
+    assert parser._clean_number("0%") == 0.0
+
+
+def test_parse_multiple_rows(parser):
+    """Тест парсинга нескольких строк"""
+    mock_html = """
+    <html>
+    <body>
+        <div class="main__table">
+            <table>
+                <tr><th>Header</th></tr>
+                <tr>
+                    <td class="trades-table__name"><a href="/test1">Компания 1</a></td>
+                    <td class="trades-table__ticker">T1</td>
+                    <td class="trades-table__price">100</td>
+                    <td class="trades-table__change-per">+1%</td>
+                    <td class="trades-table__volume">1000</td>
+                    <td class="trades-table__week">+1%</td>
+                    <td class="trades-table__month">+1%</td>
+                    <td class="trades-table__first">+1%</td>
+                    <td class="trades-table__year">+1%</td>
+                    <td class="trades-table__rub">100</td>
+                    <td class="trades-table__usd">1</td>
+                </tr>
+                <tr>
+                    <td class="trades-table__name"><a href="/test2">Компания 2</a></td>
+                    <td class="trades-table__ticker">T2</td>
+                    <td class="trades-table__price">200</td>
+                    <td class="trades-table__change-per">+2%</td>
+                    <td class="trades-table__volume">2000</td>
+                    <td class="trades-table__week">+2%</td>
+                    <td class="trades-table__month">+2%</td>
+                    <td class="trades-table__first">+2%</td>
+                    <td class="trades-table__year">+2%</td>
+                    <td class="trades-table__rub">200</td>
+                    <td class="trades-table__usd">2</td>
+                </tr>
+            </table>
+        </div>
+    </body>
+    </html>
+    """
+
+    with patch.object(parser, "fetch_html", return_value=mock_html):
+        result = parser.parse()
+
+        assert len(result) == 2
+        assert result[0]["ticker"] == "T1"
+        assert result[1]["ticker"] == "T2"
+
+
+def test_parse_all_fields_populated(parser):
+    """Тест парсинга со всеми заполненными полями"""
+    mock_html = """
+    <html>
+    <body>
+        <div class="main__table">
+            <table>
+                <tr><th>Header</th></tr>
+                <tr>
+                    <td class="trades-table__name"><a href="/test">Полная компания</a></td>
+                    <td class="trades-table__ticker">FULL</td>
+                    <td class="trades-table__price">123.45</td>
+                    <td class="trades-table__change-per">+5.67%</td>
+                    <td class="trades-table__volume">9 999 999</td>
+                    <td class="trades-table__week">+1.11%</td>
+                    <td class="trades-table__month">+2.22%</td>
+                    <td class="trades-table__first">+3.33%</td>
+                    <td class="trades-table__year">+4.44%</td>
+                    <td class="trades-table__rub">1 000 000</td>
+                    <td class="trades-table__usd">10 000</td>
+                </tr>
+            </table>
+        </div>
+    </body>
+    </html>
+    """
+
+    with patch.object(parser, "fetch_html", return_value=mock_html):
+        result = parser.parse()
+
+        assert len(result) == 1
+        item = result[0]
+        assert item["name"] == "Полная компания"
+        assert item["ticker"] == "FULL"
+        assert item["last price, rub"] == "123.45"
+        assert item["price change"] == "+5.67%"
+        assert item["volume, mln rub"] == "9 999 999"
+        assert item["change in one week"] == "+1.11%"
+        assert item["change in one month"] == "+2.22%"
+        assert item["change in year to date"] == "+3.33%"
+        assert item["change in twelve month"] == "+4.44%"
+        assert item["capitalization, bln rub"] == "1 000 000"
+        assert item["capitalization, bln usd"] == "10 000"
+
+
+def test_parse_only_header_row(parser):
+    """Тест парсинга таблицы только с заголовком"""
+    mock_html = """
+    <html>
+    <body>
+        <div class="main__table">
+            <table>
+                <tr><th>Name</th><th>Ticker</th></tr>
+            </table>
+        </div>
+    </body>
+    </html>
+    """
+
+    with patch.object(parser, "fetch_html", return_value=mock_html):
+        result = parser.parse()
+        assert result == []
+
+
+def test_save_to_db_multiple_items(parser):
+    """Тест сохранения нескольких записей в БД"""
+    fake_data = [
+        {
+            "name": "Компания 1",
+            "ticker": "T1",
+            "last price, rub": "100",
+            "price change": "+1%",
+            "volume, mln rub": "1000",
+            "change in one week": "+1%",
+            "change in one month": "+1%",
+            "change in year to date": "+1%",
+            "change in twelve month": "+1%",
+            "capitalization, bln rub": "100",
+            "capitalization, bln usd": "1",
+        },
+        {
+            "name": "Компания 2",
+            "ticker": "T2",
+            "last price, rub": "200",
+            "price change": "+2%",
+            "volume, mln rub": "2000",
+            "change in one week": "+2%",
+            "change in one month": "+2%",
+            "change in year to date": "+2%",
+            "change in twelve month": "+2%",
+            "capitalization, bln rub": "200",
+            "capitalization, bln usd": "2",
+        },
+    ]
+
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = [1]
+
+    with patch.object(parser, "_get_db_connection", return_value=mock_conn):
+        parser.save_to_db(fake_data)
+
+        # Должен быть 1 SELECT + 2 INSERT = 3 вызова execute
+        assert mock_cursor.execute.call_count == 3
+        mock_conn.commit.assert_called_once()
+
+
+def test_save_to_db_connection_error(parser):
+    """Тест обработки ошибки подключения к БД"""
+    fake_data = [{"name": "Test", "ticker": "TEST", "last price, rub": "100"}]
+
+    with patch.object(parser, "_get_db_connection", side_effect=Exception("Connection error")):
+        # Не должно быть исключения, только логирование
+        parser.save_to_db(fake_data)
+
+
+def test_save_to_db_cursor_error(parser):
+    """Тест обработки ошибки при создании cursor"""
+    fake_data = [{"name": "Test", "ticker": "TEST", "last price, rub": "100"}]
+
+    mock_conn = MagicMock()
+    mock_conn.cursor.side_effect = Exception("Cursor error")
+
+    with patch.object(parser, "_get_db_connection", return_value=mock_conn):
+        parser.save_to_db(fake_data)
+        mock_conn.rollback.assert_called_once()
+        mock_conn.close.assert_called_once()
+
+
+def test_save_to_db_close_error(parser):
+    """Тест обработки ошибки при закрытии соединения"""
+    fake_data = [{
+        "name": "Test",
+        "ticker": "TEST",
+        "last price, rub": "100",
+        "price change": "+1%",
+        "volume, mln rub": "1000",
+        "change in one week": "+1%",
+        "change in one month": "+1%",
+        "change in year to date": "+1%",
+        "change in twelve month": "+1%",
+        "capitalization, bln rub": "100",
+        "capitalization, bln usd": "1",
+    }]
+
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = [1]
+    mock_conn.close.side_effect = Exception("Close error")
+
+    with patch.object(parser, "_get_db_connection", return_value=mock_conn):
+        # Исключение при close все равно будет выброшено, но это нормально
+        # Проверяем что до этого все выполнилось
+        try:
+            parser.save_to_db(fake_data)
+        except Exception:
+            pass  # Ожидаемое исключение при close
+        
+        # Проверяем что commit был вызван до ошибки close
+        mock_conn.commit.assert_called_once()
+
+
+def test_run_smartlab_parser_empty_data():
+    """Тест run_smartlab_parser с пустым списком данных"""
+    from src.parsers.sources import smartlab
+
+    with patch.object(smartlab, "logging") as mock_logging, patch.object(
+        smartlab, "SmartlabParser"
+    ) as mock_cls:
+        parser_instance = MagicMock()
+        parser_instance.parse.return_value = []
+        mock_cls.return_value = parser_instance
+
+        with patch.object(smartlab.logger, "warning") as mock_warning:
+            smartlab.run_smartlab_parser()
+            mock_warning.assert_called()
+
+
+def test_run_smartlab_parser_save_error():
+    """Тест run_smartlab_parser с ошибкой при сохранении"""
+    from src.parsers.sources import smartlab
+
+    with patch.object(smartlab, "logging") as mock_logging, patch.object(
+        smartlab, "SmartlabParser"
+    ) as mock_cls:
+        parser_instance = MagicMock()
+        parser_instance.parse.return_value = [{"name": "OK"}]
+        parser_instance.save_to_db.side_effect = Exception("Save error")
+        mock_cls.return_value = parser_instance
+
+        with patch.object(smartlab.logger, "error") as mock_error:
+            smartlab.run_smartlab_parser()
+            mock_error.assert_called()
+
+
+def test_init_with_headers(parser):
+    """Тест инициализации парсера с заголовками"""
+    headers = {"User-Agent": "Test Agent"}
+    parser_with_headers = SmartlabParser("https://test.com", headers=headers)
+    assert parser_with_headers.url == "https://test.com"
+    assert parser_with_headers.headers == headers
+
+
+def test_parse_exception_in_row_processing(parser):
+    """Тест обработки исключения при обработке строки"""
+    mock_html = """
+    <html>
+    <body>
+        <div class="main__table">
+            <table>
+                <tr><th>Header</th></tr>
+                <tr>
+                    <td class="trades-table__name"><a href="/test">Test</a></td>
+                </tr>
+            </table>
+        </div>
+    </body>
+    </html>
+    """
+
+    def side_effect(*args, **kwargs):
+        if args[1] == "td" and args[2] == "trades-table__ticker":
+            raise Exception("Row processing error")
+        return "Test" if args[1] == "td" and args[2] == "trades-table__name" else "No information!"
+
+    with patch.object(parser, "fetch_html", return_value=mock_html):
+        with patch.object(parser, "_extract_cell_text", side_effect=side_effect):
+            result = parser.parse()
+            # Должна быть обработана ошибка и строка пропущена
+            assert len(result) == 0

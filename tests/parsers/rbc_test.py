@@ -358,3 +358,294 @@ def test_save_to_db_rollback_on_error(parser):
         
         # Проверяем, что был вызван rollback
         mock_conn.rollback.assert_called_once()
+
+
+# --- Дополнительные тесты для увеличения покрытия ---
+
+
+def test_extract_title_with_full_url(parser):
+    """Тест обработки полного URL (начинается с http)"""
+    mock_html = """
+    <html>
+    <body>
+        <h1>Заголовок новости</h1>
+    </body>
+    </html>
+    """
+    
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.text = mock_html
+    
+    with patch.object(parser.session, 'get', return_value=mock_response):
+        # Тестируем с полным URL
+        title = parser._extract_title_from_page("https://www.rbc.ru/test")
+        assert title == "Заголовок новости"
+
+
+def test_extract_title_with_relative_url(parser):
+    """Тест обработки относительного URL"""
+    mock_html = """
+    <html>
+    <body>
+        <h1>Заголовок новости</h1>
+    </body>
+    </html>
+    """
+    
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.text = mock_html
+    
+    with patch.object(parser.session, 'get', return_value=mock_response):
+        # Тестируем с относительным URL
+        title = parser._extract_title_from_page("/politics/07/12/2025/693599919a7947c64d803191")
+        assert title == "Заголовок новости"
+
+
+def test_extract_title_exception_handling(parser):
+    """Тест обработки исключения при извлечении заголовка"""
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.text = "<html><body></body></html>"
+    mock_response.get.side_effect = Exception("Error")
+    
+    with patch.object(parser.session, 'get', return_value=mock_response):
+        with patch('src.parsers.sources.rbc.BeautifulSoup', side_effect=Exception("Parse error")):
+            title = parser._extract_title_from_page("https://www.rbc.ru/test")
+            assert title == ""
+
+
+def test_extract_title_with_class_title(parser):
+    """Тест извлечения заголовка из элемента с классом title"""
+    mock_html = """
+    <html>
+    <body>
+        <h2 class="article-title">Заголовок из класса title</h2>
+    </body>
+    </html>
+    """
+    
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.text = mock_html
+    
+    with patch.object(parser.session, 'get', return_value=mock_response):
+        title = parser._extract_title_from_page("https://www.rbc.ru/test")
+        assert "Заголовок из класса title" in title
+
+
+def test_extract_text_status_not_200(parser):
+    """Тест обработки статуса не 200"""
+    mock_response = Mock()
+    mock_response.status_code = 404
+    
+    with patch.object(parser.session, 'get', return_value=mock_response):
+        text = parser._extract_text_from_page("https://www.rbc.ru/test")
+        assert text == ""
+
+
+def test_extract_text_from_all_paragraphs(parser):
+    """Тест извлечения текста из всех параграфов на странице"""
+    mock_html = """
+    <html>
+    <body>
+        <p>Первый параграф новости с достаточным количеством текста для успешного извлечения и проверки работы парсера.</p>
+        <p>Второй параграф новости также содержит достаточно текста для успешного извлечения и проверки работы парсера.</p>
+        <p>Короткий</p>
+        <p>© РБК</p>
+        <p>12:30</p>
+    </body>
+    </html>
+    """
+    
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.text = mock_html
+    
+    with patch.object(parser.session, 'get', return_value=mock_response):
+        text = parser._extract_text_from_page("https://www.rbc.ru/test")
+        assert "Первый параграф" in text
+        assert "Второй параграф" in text
+        assert "Короткий" not in text
+        assert "©" not in text
+        assert "12:30" not in text
+
+
+def test_extract_text_filters_skip_phrases(parser):
+    """Тест фильтрации параграфов с рекламными фразами"""
+    mock_html = """
+    <html>
+    <body>
+        <p>Основной текст новости с достаточным количеством символов для успешного извлечения и проверки фильтрации рекламы.</p>
+        <p>Читайте РБК в Telegram для получения последних новостей и обновлений.</p>
+        <p>Реклама, ПАО «Сбербанк», 18+</p>
+        <p>Попробуйте новую функцию Гигачат для общения.</p>
+    </body>
+    </html>
+    """
+    
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.text = mock_html
+    
+    with patch.object(parser.session, 'get', return_value=mock_response):
+        text = parser._extract_text_from_page("https://www.rbc.ru/test")
+        assert "Основной текст" in text
+        assert "Читайте РБК" not in text
+        assert "Реклама" not in text
+        assert "Гигачат" not in text
+
+
+def test_extract_text_filters_photo_video_start(parser):
+    """Тест фильтрации параграфов начинающихся с Фото/Видео"""
+    mock_html = """
+    <html>
+    <body>
+        <p>Основной текст новости с достаточным количеством символов для успешного извлечения.</p>
+        <p>Фото: Автор фотографии</p>
+        <p>Видео: Название видео</p>
+        <p>Фото: еще одно фото</p>
+    </body>
+    </html>
+    """
+    
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.text = mock_html
+    
+    with patch.object(parser.session, 'get', return_value=mock_response):
+        text = parser._extract_text_from_page("https://www.rbc.ru/test")
+        assert "Основной текст" in text
+        assert "Фото:" not in text
+        assert "Видео:" not in text
+
+
+def test_extract_text_exception_handling(parser):
+    """Тест обработки исключения при извлечении текста"""
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.text = "<html><body></body></html>"
+    
+    with patch.object(parser.session, 'get', return_value=mock_response):
+        with patch('src.parsers.sources.rbc.BeautifulSoup', side_effect=Exception("Parse error")):
+            text = parser._extract_text_from_page("https://www.rbc.ru/test")
+            assert text == ""
+
+
+def test_parse_with_exception_in_extraction(parser):
+    """Тест обработки исключения при извлечении заголовка/текста"""
+    mock_html = """
+    <html>
+    <body>
+        <a href="/politics/07/12/2025/693599919a7947c64d803191">Новость 1</a>
+    </body>
+    </html>
+    """
+    
+    with patch.object(parser, 'fetch_html', return_value=mock_html):
+        with patch.object(parser, '_extract_title_from_page', side_effect=Exception("Error")):
+            with patch.object(parser, '_extract_text_from_page', return_value=""):
+                result = parser.parse()
+                # Должна быть обработана ошибка
+                assert isinstance(result, list)
+
+
+def test_save_to_db_multiple_items(parser):
+    """Тест сохранения нескольких новостей"""
+    fake_data = [
+        {"title": "Новость 1", "url": "https://www.rbc.ru/test1", "text": "Текст 1"},
+        {"title": "Новость 2", "url": "https://www.rbc.ru/test2", "text": "Текст 2"},
+    ]
+    
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = [1]
+    
+    with patch.object(parser, '_get_db_connection', return_value=mock_conn):
+        parser.save_to_db(fake_data)
+        
+        # Должен быть 1 SELECT + 2 INSERT = 3 вызова execute
+        assert mock_cursor.execute.call_count == 3
+        mock_conn.commit.assert_called_once()
+
+
+def test_save_to_db_connection_error(parser):
+    """Тест обработки ошибки подключения к БД"""
+    fake_data = [{"title": "Тест", "url": "https://test.ru", "text": "Текст"}]
+    
+    with patch.object(parser, '_get_db_connection', side_effect=Exception("Connection error")):
+        # Не должно быть исключения, только логирование
+        parser.save_to_db(fake_data)
+
+
+def test_save_to_db_close_error(parser):
+    """Тест обработки ошибки при закрытии соединения"""
+    fake_data = [{"title": "Тест", "url": "https://test.ru", "text": "Текст"}]
+    
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = [1]
+    mock_conn.close.side_effect = Exception("Close error")
+    
+    with patch.object(parser, '_get_db_connection', return_value=mock_conn):
+        try:
+            parser.save_to_db(fake_data)
+        except Exception:
+            pass  # Ожидаемое исключение при close
+        
+        mock_conn.commit.assert_called_once()
+
+
+def test_run_rbc_parser_success():
+    """Тест успешного сценария run_rbc_parser"""
+    from src.parsers.sources import rbc
+    
+    with patch.object(rbc, "logging") as mock_logging, patch.object(
+        rbc, "RBCParser"
+    ) as mock_cls:
+        parser_instance = MagicMock()
+        parser_instance.parse.return_value = [{"title": "OK", "url": "https://test.ru", "text": "Text"}]
+        parser_instance.save_to_db.return_value = None
+        mock_cls.return_value = parser_instance
+        
+        rbc.run_rbc_parser()
+        
+        mock_logging.basicConfig.assert_called_once()
+        mock_cls.assert_called_once()
+        parser_instance.parse.assert_called_once()
+        parser_instance.save_to_db.assert_called_once()
+
+
+def test_run_rbc_parser_empty_data():
+    """Тест run_rbc_parser с пустым списком данных"""
+    from src.parsers.sources import rbc
+    
+    with patch.object(rbc, "logging") as mock_logging, patch.object(
+        rbc, "RBCParser"
+    ) as mock_cls:
+        parser_instance = MagicMock()
+        parser_instance.parse.return_value = []
+        mock_cls.return_value = parser_instance
+        
+        with patch.object(rbc.logger, "warning") as mock_warning:
+            rbc.run_rbc_parser()
+            mock_warning.assert_called()
+
+
+def test_run_rbc_parser_handles_exception():
+    """Тест обработки исключения внутри run_rbc_parser"""
+    from src.parsers.sources import rbc
+    
+    with patch.object(rbc, "logging") as mock_logging, patch.object(
+        rbc, "RBCParser"
+    ) as mock_cls:
+        parser_instance = MagicMock()
+        parser_instance.parse.side_effect = RuntimeError("boom")
+        mock_cls.return_value = parser_instance
+        
+        with patch.object(rbc.logger, "error") as mock_error:
+            rbc.run_rbc_parser()
+            mock_error.assert_called()
