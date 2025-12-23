@@ -195,65 +195,52 @@ class SmartlabParser(BaseParser):
             return 0.0
 
     def save_to_db(self, data: List[Dict]) -> None:
-        """Сохранение данных в БД"""
+        """Сохранение данных в БД через SQLAlchemy"""
         if not data:
             logger.warning("Нет данных для сохранения в БД.")
             return
 
-        conn = None
+        session = None
         try:
-            conn = self._get_db_connection()
-            cursor = conn.cursor()
-
-            # 1. Получаем ID источника (SmartLab)
-            cursor.execute("SELECT id FROM source WHERE name = 'SmartLab';")
-            source_row = cursor.fetchone()
-
-            if not source_row:
+            session = self._get_db_session()
+            # 1. Получаем источник (SmartLab)
+            source = self._get_source_by_name(session, "SmartLab")
+            if not source:
                 logger.error("Ошибка: Источник 'SmartLab' не найден в таблице source.")
                 return
 
-            source_id = source_row[0]
+            # 2. Импортируем модель
+            from src.database import SmartlabStock
+            from decimal import Decimal
 
-            # 2. Вставляем данные
-            insert_query = """
-                INSERT INTO smartlab_stocks (
-                    source_id, name, ticker, 
-                    last_price_rub, price_change_percent, volume_mln_rub,
-                    change_week_percent, change_month_percent, change_ytd_percent, change_year_percent,
-                    capitalization_bln_rub, capitalization_bln_usd
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-            """
-
+            # 3. Вставляем данные
             for item in data:
-                # Чистим данные перед вставкой
-                params = (
-                    source_id,
-                    item.get("name"),
-                    item.get("ticker"),
-                    self._clean_number(item.get("last price, rub")),
-                    self._clean_number(item.get("price change")),
-                    self._clean_number(item.get("volume, mln rub")),
-                    self._clean_number(item.get("change in one week")),
-                    self._clean_number(item.get("change in one month")),
-                    self._clean_number(item.get("change in year to date")),
-                    self._clean_number(item.get("change in twelve month")),
-                    self._clean_number(item.get("capitalization, bln rub")),
-                    self._clean_number(item.get("capitalization, bln usd")),
+                stock = SmartlabStock(
+                    source_id=source.id,
+                    name=item.get("name"),
+                    ticker=item.get("ticker"),
+                    last_price_rub=Decimal(str(self._clean_number(item.get("last price, rub")))),
+                    price_change_percent=Decimal(str(self._clean_number(item.get("price change")))),
+                    volume_mln_rub=Decimal(str(self._clean_number(item.get("volume, mln rub")))),
+                    change_week_percent=Decimal(str(self._clean_number(item.get("change in one week")))),
+                    change_month_percent=Decimal(str(self._clean_number(item.get("change in one month")))),
+                    change_ytd_percent=Decimal(str(self._clean_number(item.get("change in year to date")))),
+                    change_year_percent=Decimal(str(self._clean_number(item.get("change in twelve month")))),
+                    capitalization_bln_rub=Decimal(str(self._clean_number(item.get("capitalization, bln rub")))),
+                    capitalization_bln_usd=Decimal(str(self._clean_number(item.get("capitalization, bln usd")))),
                 )
-                cursor.execute(insert_query, params)
+                session.add(stock)
 
-            conn.commit()
+            session.commit()
             logger.info(f"Успешно обработано {len(data)} записей для БД.")
 
         except Exception as e:
             logger.error(f"Ошибка при сохранении в БД: {e}")
-            if conn:
-                conn.rollback()
+            if session:
+                session.rollback()
         finally:
-            if conn:
-                conn.close()
+            if session:
+                session.close()
 
 
 def run_smartlab_parser():

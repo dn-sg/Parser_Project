@@ -8,6 +8,7 @@ import re
 import logging
 from datetime import datetime
 import json
+from src.database import Source
 
 
 logger = logging.getLogger(__name__)
@@ -162,62 +163,54 @@ class DohodParser(BaseParser):
             return None
 
     def save_to_db(self, data: List[Dict]) -> None:
-        """Сохранение данных в БД"""
+        """Сохранение данных в БД через SQLAlchemy"""
         if not data:
             logger.warning("Нет данных для сохранения в БД.")
             return
 
-        conn = None
+        session = None
         try:
-            conn = self._get_db_connection()
-            cursor = conn.cursor()
-
-            # 1. Получаем ID источника
-            cursor.execute("SELECT id FROM source WHERE name = 'Dohod' OR name = 'dohod.ru' LIMIT 1;")
-            source_row = cursor.fetchone()
-
-            if not source_row:
+            session = self._get_db_session()
+            # 1. Получаем источник (Dohod или dohod.ru)
+            source = session.query(Source).filter(
+                (Source.name == "Dohod") | (Source.name == "dohod.ru")
+            ).first()
+            
+            if not source:
                 logger.error("Источник 'Dohod' не найден в БД. Проверь таблицу source.")
                 return
 
-            source_id = source_row[0]
+            # 2. Импортируем модель
+            from src.database import DohodDiv
+            from decimal import Decimal
 
-            # 2. Вставка данных
-            # Предполагаем, что таблица называется dohod_divs
-            insert_query = """
-                INSERT INTO dohod_divs (
-                    source_id, ticker, company_name, sector, period, 
-                    payment_per_share, currency, yield_percent, 
-                    record_date_estimate, capitalization_mln_rub, dsi
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-            """
-
+            # 3. Вставляем данные
             for item in data:
-                cursor.execute(insert_query, (
-                    source_id,
-                    item['ticker'],
-                    item['company_name'],
-                    item['sector'],
-                    item['period'],
-                    item['payment_per_share'],
-                    item['currency'],
-                    item['yield_percent'],
-                    item['record_date_estimate'],  # драйвер сам преобразует date -> SQL DATE
-                    item['capitalization_mln_rub'],
-                    item['dsi']
-                ))
+                div = DohodDiv(
+                    source_id=source.id,
+                    ticker=item.get('ticker'),
+                    company_name=item.get('company_name'),
+                    sector=item.get('sector'),
+                    period=item.get('period'),
+                    payment_per_share=Decimal(str(item.get('payment_per_share', 0))),
+                    currency=item.get('currency'),
+                    yield_percent=Decimal(str(item.get('yield_percent', 0))),
+                    record_date_estimate=item.get('record_date_estimate'),
+                    capitalization_mln_rub=Decimal(str(item.get('capitalization_mln_rub', 0))),
+                    dsi=Decimal(str(item.get('dsi', 0))),
+                )
+                session.add(div)
 
-            conn.commit()
+            session.commit()
             logger.info(f"Успешно сохранено {len(data)} записей дивидендов.")
 
         except Exception as e:
             logger.error(f"Ошибка сохранения в БД: {e}", exc_info=True)
-            if conn:
-                conn.rollback()
+            if session:
+                session.rollback()
         finally:
-            if conn:
-                conn.close()
+            if session:
+                session.close()
 
 
 def run_dohod_parser():

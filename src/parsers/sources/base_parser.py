@@ -5,11 +5,9 @@ import requests
 from bs4 import BeautifulSoup
 from typing import List, Dict, Optional
 import json
-import pg8000.dbapi # Библиотека для БД
-import os
-from dotenv import load_dotenv
+from sqlalchemy.orm import Session
+from src.database import get_sync_session, Source
 
-load_dotenv()
 class BaseParser:
     """Базовый класс для всех парсеров"""
     
@@ -64,16 +62,14 @@ class BaseParser:
         """
         return json.dumps(data, ensure_ascii=False, indent=2)
 
-    # --- НОВОЕ: Подключение к БД ---
-    def _get_db_connection(self):
-        """Создает подключение к PostgreSQL используя .env"""
-        return pg8000.dbapi.connect(
-            host=os.getenv("POSTGRES_HOST", "localhost"),
-            port=os.getenv("POSTGRES_PORT", "5432"),
-            database=os.getenv("POSTGRES_DB"),
-            user=os.getenv("POSTGRES_USER"),
-            password=os.getenv("POSTGRES_PASSWORD")
-        )
+    # --- Подключение к БД через SQLAlchemy ---
+    def _get_db_session(self) -> Session:
+        """Создает сессию SQLAlchemy для работы с БД"""
+        return get_sync_session()
+    
+    def _get_source_by_name(self, session: Session, name: str) -> Optional[Source]:
+        """Получает источник по имени"""
+        return session.query(Source).filter(Source.name == name).first()
 
     def save_to_db(self, data: List[Dict]) -> None:
         """Метод сохранения в БД (переопределяется в детях)"""

@@ -258,55 +258,50 @@ class RBCParser(BaseParser):
             logger.warning(f"Ошибка текста {url}: {e}")
             return ""
 
-    # --- Метод сохранения в БД ---
+    # --- Метод сохранения в БД через SQLAlchemy ---
     def save_to_db(self, data: List[Dict]) -> None:
-        """Сохранение новостей в таблицу rbc_news"""
+        """Сохранение новостей в таблицу rbc_news через SQLAlchemy"""
         if not data:
             logger.warning("Нет данных для сохранения в БД.")
             return
 
-        conn = None
+        session = None
         try:
-            conn = self._get_db_connection()
-            cursor = conn.cursor()
-
-            # 1. Получаем ID источника (RBC)
-            # В pg8000 используем conn.run, но через DBAPI cursor.execute тоже работает
-            cursor.execute("SELECT id FROM source WHERE name = 'RBC'")
-            source_row = cursor.fetchone()
-
-            if not source_row:
+            session = self._get_db_session()
+            # 1. Получаем источник (RBC)
+            source = self._get_source_by_name(session, "RBC")
+            if not source:
                 logger.error("Ошибка: Источник 'RBC' не найден в таблице source.")
                 return
 
-            source_id = source_row[0]
+            # 2. Импортируем модель
+            from src.database import RBCNews
+            from sqlalchemy.dialects.postgresql import insert
 
-            # 2. Вставляем данные
-            # ON CONFLICT (url) DO NOTHING - чтобы не дублировать новости
-            insert_query = """
-                INSERT INTO rbc_news (source_id, title, url, text)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (url) DO NOTHING;
-            """
-
+            # 3. Вставляем данные с обработкой конфликтов
             for item in data:
-                cursor.execute(insert_query, (
-                    source_id,
-                    item.get("title"),
-                    item.get("url"),
-                    item.get("text")
-                ))
+                # Используем insert().on_conflict_do_nothing() для обработки дубликатов
+                stmt = insert(RBCNews).values(
+                    source_id=source.id,
+                    title=item.get("title"),
+                    url=item.get("url"),
+                    text=item.get("text")
+                )
+                # Используем on_conflict_do_nothing для обработки дубликатов по url
+                stmt = stmt.on_conflict_do_nothing(index_elements=['url'])
+                
+                session.execute(stmt)
 
-            conn.commit()
+            session.commit()
             logger.info(f"Успешно обработано {len(data)} новостей для БД.")
 
         except Exception as e:
             logger.error(f"Ошибка при сохранении в БД: {e}", exc_info=True)
-            if conn:
-                conn.rollback()
+            if session:
+                session.rollback()
         finally:
-            if conn:
-                conn.close()
+            if session:
+                session.close()
 
 
 def run_rbc_parser():

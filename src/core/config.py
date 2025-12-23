@@ -38,8 +38,9 @@ class Config(BaseSettings):
         super().__init__(**kwargs)
         # Build database URLs if not provided
         if not self.DATABASE_URL:
+            # Используем pg8000 для синхронных подключений
             self.DATABASE_URL = (
-                f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+                f"postgresql+pg8000://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
                 f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
             )
         if not self.ASYNC_DATABASE_URL:

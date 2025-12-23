@@ -340,7 +340,7 @@ def test_run_smartlab_parser_handles_exception():
 
 
 def test_save_to_db(parser):
-    """Тест сохранения данных в БД"""
+    """Тест сохранения данных в БД через SQLAlchemy"""
     fake_data = [
         {
             "name": "Газпром",
@@ -357,53 +357,69 @@ def test_save_to_db(parser):
         }
     ]
 
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_conn.cursor.return_value = mock_cursor
-    mock_cursor.fetchone.return_value = [1]  # ID источника
+    mock_session = MagicMock()
+    mock_source = MagicMock()
+    mock_source.id = 1
+    mock_source.name = "SmartLab"
+    
+    # Мокаем query для получения источника
+    mock_query = MagicMock()
+    mock_query.filter.return_value.first.return_value = mock_source
+    mock_session.query.return_value = mock_query
 
-    with patch.object(parser, "_get_db_connection", return_value=mock_conn):
+    with patch.object(parser, "_get_db_session", return_value=mock_session):
         parser.save_to_db(fake_data)
 
-        # Проверяем, что соединение открылось
-        parser._get_db_connection.assert_called_once()
+        # Проверяем, что сессия была получена
+        parser._get_db_session.assert_called_once()
 
-        # Проверяем, что был SELECT запрос источника
-        mock_cursor.execute.assert_any_call(
-            "SELECT id FROM source WHERE name = 'SmartLab';"
-        )
+        # Проверяем, что был запрос источника
+        mock_session.query.assert_called()
 
-        # Проверяем, что был INSERT
-        assert mock_cursor.execute.call_count >= 2
+        # Проверяем, что был add для добавления записи
+        assert mock_session.add.called
 
         # Проверяем, что был commit
-        mock_conn.commit.assert_called_once()
-        mock_conn.close.assert_called_once()
+        mock_session.commit.assert_called_once()
+        mock_session.close.assert_called_once()
 
 
 def test_save_to_db_no_data(parser):
     """Тест сохранения пустого списка"""
-    with patch.object(parser, "_get_db_connection") as mock_connect:
+    with patch.object(parser, "_get_db_session") as mock_session:
         parser.save_to_db([])
-        mock_connect.assert_not_called()
+        mock_session.assert_not_called()
 
 
 def test_save_to_db_source_not_found(parser):
     """Тест случая, когда источник не найден в БД"""
-    fake_data = [{"name": "Test", "ticker": "TEST", "last price, rub": "100"}]
+    fake_data = [{
+        "name": "Test",
+        "ticker": "TEST",
+        "last price, rub": "100",
+        "price change": "+1%",
+        "volume, mln rub": "1000",
+        "change in one week": "+1%",
+        "change in one month": "+1%",
+        "change in year to date": "+1%",
+        "change in twelve month": "+1%",
+        "capitalization, bln rub": "100",
+        "capitalization, bln usd": "1",
+    }]
 
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_conn.cursor.return_value = mock_cursor
-    mock_cursor.fetchone.return_value = None  # Источник не найден
+    mock_session = MagicMock()
+    # Источник не найден
+    mock_query = MagicMock()
+    mock_query.filter.return_value.first.return_value = None
+    mock_session.query.return_value = mock_query
 
-    with patch.object(parser, "_get_db_connection", return_value=mock_conn):
+    with patch.object(parser, "_get_db_session", return_value=mock_session):
         parser.save_to_db(fake_data)
 
         # Должен попробовать найти источник
-        mock_cursor.execute.assert_called_once()
-        # Но не должен делать INSERT
-        assert mock_cursor.execute.call_count == 1
+        mock_session.query.assert_called()
+        # Но не должен делать add
+        mock_session.add.assert_not_called()
 
 
 def test_save_to_db_rollback_on_error(parser):
@@ -424,17 +440,19 @@ def test_save_to_db_rollback_on_error(parser):
         }
     ]
 
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_conn.cursor.return_value = mock_cursor
-    mock_cursor.fetchone.return_value = [1]
-    mock_cursor.execute.side_effect = [None, Exception("DB Error")]
+    mock_session = MagicMock()
+    mock_source = MagicMock()
+    mock_source.id = 1
+    mock_query = MagicMock()
+    mock_query.filter.return_value.first.return_value = mock_source
+    mock_session.query.return_value = mock_query
+    mock_session.add.side_effect = Exception("DB Error")
 
-    with patch.object(parser, "_get_db_connection", return_value=mock_conn):
+    with patch.object(parser, "_get_db_session", return_value=mock_session):
         parser.save_to_db(fake_data)
 
         # Проверяем, что был вызван rollback
-        mock_conn.rollback.assert_called_once()
+        mock_session.rollback.assert_called_once()
 
 
 def test_save_to_db_cleans_numbers(parser):
@@ -455,17 +473,20 @@ def test_save_to_db_cleans_numbers(parser):
         }
     ]
 
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_conn.cursor.return_value = mock_cursor
-    mock_cursor.fetchone.return_value = [1]
+    mock_session = MagicMock()
+    mock_source = MagicMock()
+    mock_source.id = 1
+    mock_query = MagicMock()
+    mock_query.filter.return_value.first.return_value = mock_source
+    mock_session.query.return_value = mock_query
 
-    with patch.object(parser, "_get_db_connection", return_value=mock_conn):
+    with patch.object(parser, "_get_db_session", return_value=mock_session):
         parser.save_to_db(fake_data)
 
-        # Проверяем, что execute был вызван с очищенными числами
-        # Последний вызов execute должен быть INSERT с float значениями
-        assert mock_cursor.execute.call_count >= 2
+        # Проверяем, что add был вызван с данными
+        assert mock_session.add.called
+        # Проверяем, что commit был вызван
+        mock_session.commit.assert_called_once()
 
 
 # --- Дополнительные тесты для увеличения покрытия ---
@@ -670,39 +691,70 @@ def test_save_to_db_multiple_items(parser):
         },
     ]
 
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_conn.cursor.return_value = mock_cursor
-    mock_cursor.fetchone.return_value = [1]
+    mock_session = MagicMock()
+    mock_source = MagicMock()
+    mock_source.id = 1
+    mock_query = MagicMock()
+    mock_query.filter.return_value.first.return_value = mock_source
+    mock_session.query.return_value = mock_query
 
-    with patch.object(parser, "_get_db_connection", return_value=mock_conn):
+    with patch.object(parser, "_get_db_session", return_value=mock_session):
         parser.save_to_db(fake_data)
 
-        # Должен быть 1 SELECT + 2 INSERT = 3 вызова execute
-        assert mock_cursor.execute.call_count == 3
-        mock_conn.commit.assert_called_once()
+        # Должно быть вызвано add дважды (для двух записей)
+        assert mock_session.add.call_count == 2
+        mock_session.commit.assert_called_once()
 
 
 def test_save_to_db_connection_error(parser):
     """Тест обработки ошибки подключения к БД"""
-    fake_data = [{"name": "Test", "ticker": "TEST", "last price, rub": "100"}]
+    fake_data = [{
+        "name": "Test",
+        "ticker": "TEST",
+        "last price, rub": "100",
+        "price change": "+1%",
+        "volume, mln rub": "1000",
+        "change in one week": "+1%",
+        "change in one month": "+1%",
+        "change in year to date": "+1%",
+        "change in twelve month": "+1%",
+        "capitalization, bln rub": "100",
+        "capitalization, bln usd": "1",
+    }]
 
-    with patch.object(parser, "_get_db_connection", side_effect=Exception("Connection error")):
+    with patch.object(parser, "_get_db_session", side_effect=Exception("Connection error")):
         # Не должно быть исключения, только логирование
         parser.save_to_db(fake_data)
 
 
 def test_save_to_db_cursor_error(parser):
-    """Тест обработки ошибки при создании cursor"""
-    fake_data = [{"name": "Test", "ticker": "TEST", "last price, rub": "100"}]
+    """Тест обработки ошибки при создании сессии"""
+    fake_data = [{
+        "name": "Test",
+        "ticker": "TEST",
+        "last price, rub": "100",
+        "price change": "+1%",
+        "volume, mln rub": "1000",
+        "change in one week": "+1%",
+        "change in one month": "+1%",
+        "change in year to date": "+1%",
+        "change in twelve month": "+1%",
+        "capitalization, bln rub": "100",
+        "capitalization, bln usd": "1",
+    }]
 
-    mock_conn = MagicMock()
-    mock_conn.cursor.side_effect = Exception("Cursor error")
+    mock_session = MagicMock()
+    mock_source = MagicMock()
+    mock_source.id = 1
+    mock_query = MagicMock()
+    mock_query.filter.return_value.first.return_value = mock_source
+    mock_session.query.return_value = mock_query
+    mock_session.query.side_effect = Exception("Query error")
 
-    with patch.object(parser, "_get_db_connection", return_value=mock_conn):
+    with patch.object(parser, "_get_db_session", return_value=mock_session):
         parser.save_to_db(fake_data)
-        mock_conn.rollback.assert_called_once()
-        mock_conn.close.assert_called_once()
+        mock_session.rollback.assert_called_once()
+        mock_session.close.assert_called_once()
 
 
 def test_save_to_db_close_error(parser):
@@ -721,13 +773,15 @@ def test_save_to_db_close_error(parser):
         "capitalization, bln usd": "1",
     }]
 
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_conn.cursor.return_value = mock_cursor
-    mock_cursor.fetchone.return_value = [1]
-    mock_conn.close.side_effect = Exception("Close error")
+    mock_session = MagicMock()
+    mock_source = MagicMock()
+    mock_source.id = 1
+    mock_query = MagicMock()
+    mock_query.filter.return_value.first.return_value = mock_source
+    mock_session.query.return_value = mock_query
+    mock_session.close.side_effect = Exception("Close error")
 
-    with patch.object(parser, "_get_db_connection", return_value=mock_conn):
+    with patch.object(parser, "_get_db_session", return_value=mock_session):
         # Исключение при close все равно будет выброшено, но это нормально
         # Проверяем что до этого все выполнилось
         try:
@@ -736,7 +790,7 @@ def test_save_to_db_close_error(parser):
             pass  # Ожидаемое исключение при close
         
         # Проверяем что commit был вызван до ошибки close
-        mock_conn.commit.assert_called_once()
+        mock_session.commit.assert_called_once()
 
 
 def test_run_smartlab_parser_empty_data():

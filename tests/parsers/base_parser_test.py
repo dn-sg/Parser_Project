@@ -138,50 +138,31 @@ def test_get_parsed_data_empty():
 
 # --- Тесты _get_db_connection ---
 
-def test_get_db_connection():
-    """Тест создания подключения к БД"""
+def test_get_db_session():
+    """Тест создания сессии БД через SQLAlchemy"""
     parser = BaseParser("https://example.com")
     
-    mock_conn = MagicMock()
-    with patch('src.parsers.sources.base_parser.pg8000.dbapi.connect', return_value=mock_conn):
-        with patch.dict('os.environ', {
-            'POSTGRES_HOST': 'test_host',
-            'POSTGRES_PORT': '5433',
-            'POSTGRES_DB': 'test_db',
-            'POSTGRES_USER': 'test_user',
-            'POSTGRES_PASSWORD': 'test_pass'
-        }):
-            conn = parser._get_db_connection()
-            assert conn == mock_conn
+    mock_session = MagicMock()
+    with patch('src.parsers.sources.base_parser.get_sync_session', return_value=mock_session):
+        session = parser._get_db_session()
+        assert session == mock_session
 
 
-def test_get_db_connection_defaults():
-    """Тест создания подключения с дефолтными значениями"""
+def test_get_source_by_name():
+    """Тест получения источника по имени"""
     parser = BaseParser("https://example.com")
     
-    mock_conn = MagicMock()
-    with patch('src.parsers.sources.base_parser.pg8000.dbapi.connect', return_value=mock_conn) as mock_connect:
-        # Удаляем переменные окружения для host и port, чтобы проверить дефолты
-        import os
-        original_host = os.environ.pop('POSTGRES_HOST', None)
-        original_port = os.environ.pop('POSTGRES_PORT', None)
-        
-        try:
-            with patch.dict('os.environ', {
-                'POSTGRES_DB': 'test_db',
-                'POSTGRES_USER': 'test_user',
-                'POSTGRES_PASSWORD': 'test_pass'
-            }, clear=False):
-                conn = parser._get_db_connection()
-                # Проверяем, что использовались дефолтные значения для host и port
-                mock_connect.assert_called_once()
-                call_args = mock_connect.call_args[1]
-                assert call_args['host'] == 'localhost'  # дефолт
-                assert call_args['port'] == '5432'  # дефолт
-        finally:
-            # Восстанавливаем оригинальные значения
-            if original_host:
-                os.environ['POSTGRES_HOST'] = original_host
-            if original_port:
-                os.environ['POSTGRES_PORT'] = original_port
+    mock_session = MagicMock()
+    mock_source = MagicMock()
+    mock_source.name = "RBC"
+    mock_source.id = 1
+    
+    mock_query = MagicMock()
+    mock_query.filter.return_value.first.return_value = mock_source
+    mock_session.query.return_value = mock_query
+    
+    with patch.object(parser, '_get_db_session', return_value=mock_session):
+        source = parser._get_source_by_name(mock_session, "RBC")
+        assert source == mock_source
+        mock_session.query.assert_called_once()
 

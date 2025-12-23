@@ -1,23 +1,24 @@
-import os
+"""
+FastAPI application with async database connections using SQLAlchemy
+"""
 from typing import Optional, List, Dict, Any
-
-import pg8000.dbapi
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from celery.result import AsyncResult
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, distinct
+from sqlalchemy.orm import selectinload
 
 from src.tasks import celery, task_parse_smartlab, task_parse_rbc, task_parse_dohod
+from src.database import (
+    get_async_session,
+    Source,
+    Log,
+    RBCNews,
+    SmartlabStock,
+    DohodDiv,
+)
 
 app = FastAPI(title="Parser Project API")
-
-
-def get_conn():
-    return pg8000.dbapi.connect(
-        user=os.getenv("POSTGRES_USER"),
-        password=os.getenv("POSTGRES_PASSWORD"),
-        host=os.getenv("POSTGRES_HOST", "db"),
-        port=int(os.getenv("POSTGRES_PORT", "5432")),
-        database=os.getenv("POSTGRES_DB"),
-    )
 
 
 @app.get("/")
@@ -51,221 +52,219 @@ def task_status(task_id: str):
 
 
 @app.get("/api/stats")
-def stats():
-    conn = get_conn()
-    cur = conn.cursor()
-
-    cur.execute("SELECT count(*) FROM smartlab_stocks;")
-    smartlab_total = cur.fetchone()[0]
-
-    cur.execute("SELECT count(*) FROM rbc_news;")
-    rbc_total = cur.fetchone()[0]
-
-    cur.execute("SELECT count(*) FROM dohod_divs;")
-    dohod_total = cur.fetchone()[0]
-
-    conn.close()
-    return {"smartlab_total": smartlab_total, "rbc_total": rbc_total, "dohod_total": dohod_total}
+async def stats(session: AsyncSession = Depends(get_async_session)):
+    """Получение статистики по всем источникам"""
+    smartlab_count = await session.scalar(select(func.count(SmartlabStock.id)))
+    rbc_count = await session.scalar(select(func.count(RBCNews.id)))
+    dohod_count = await session.scalar(select(func.count(DohodDiv.id)))
+    
+    return {
+        "smartlab_total": smartlab_count or 0,
+        "rbc_total": rbc_count or 0,
+        "dohod_total": dohod_count or 0
+    }
 
 
 @app.get("/api/data/smartlab")
-def smartlab_data(limit: int = 200):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, name, ticker, last_price_rub, price_change_percent, volume_mln_rub, parsed_at
-        FROM smartlab_stocks
-        ORDER BY parsed_at DESC, id DESC
-        LIMIT %s;
-        """,
-        (limit,),
+async def smartlab_data(
+    limit: int = 200,
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Получение данных об акциях SmartLab"""
+    stmt = (
+        select(SmartlabStock)
+        .order_by(SmartlabStock.parsed_at.desc(), SmartlabStock.id.desc())
+        .limit(limit)
     )
-    rows = cur.fetchall()
-    conn.close()
-
+    result = await session.execute(stmt)
+    stocks = result.scalars().all()
+    
     return [
         {
-            "id": r[0],
-            "name": r[1],
-            "ticker": r[2],
-            "last_price_rub": float(r[3]) if r[3] is not None else None,
-            "price_change_percent": float(r[4]) if r[4] is not None else None,
-            "volume_mln_rub": float(r[5]) if r[5] is not None else None,
-            "parsed_at": r[6],
+            "id": stock.id,
+            "name": stock.name,
+            "ticker": stock.ticker,
+            "last_price_rub": float(stock.last_price_rub) if stock.last_price_rub is not None else None,
+            "price_change_percent": float(stock.price_change_percent) if stock.price_change_percent is not None else None,
+            "volume_mln_rub": float(stock.volume_mln_rub) if stock.volume_mln_rub is not None else None,
+            "parsed_at": stock.parsed_at,
         }
-        for r in rows
+        for stock in stocks
     ]
 
 
 @app.get("/api/data/rbc")
-def rbc_data(limit: int = 50):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, title, url, parsed_at
-        FROM rbc_news
-        ORDER BY parsed_at DESC, id DESC
-        LIMIT %s;
-        """,
-        (limit,),
+async def rbc_data(
+    limit: int = 50,
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Получение новостей RBC"""
+    stmt = (
+        select(RBCNews)
+        .order_by(RBCNews.parsed_at.desc(), RBCNews.id.desc())
+        .limit(limit)
     )
-    rows = cur.fetchall()
-    conn.close()
-
-    return [{"id": r[0], "title": r[1], "url": r[2], "parsed_at": r[3]} for r in rows]
+    result = await session.execute(stmt)
+    news = result.scalars().all()
+    
+    return [
+        {
+            "id": item.id,
+            "title": item.title,
+            "url": item.url,
+            "parsed_at": item.parsed_at
+        }
+        for item in news
+    ]
 
 
 @app.get("/api/data/dohod")
-def dohod_data(limit: int = 200):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, ticker, company_name, sector, period, payment_per_share, currency, yield_percent,
-               record_date_estimate, capitalization_mln_rub, dsi, parsed_at
-        FROM dohod_divs
-        ORDER BY parsed_at DESC, id DESC
-        LIMIT %s;
-        """,
-        (limit,),
+async def dohod_data(
+    limit: int = 200,
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Получение данных о дивидендах Dohod"""
+    stmt = (
+        select(DohodDiv)
+        .order_by(DohodDiv.parsed_at.desc(), DohodDiv.id.desc())
+        .limit(limit)
     )
-    rows = cur.fetchall()
-    conn.close()
-
+    result = await session.execute(stmt)
+    divs = result.scalars().all()
+    
     return [
         {
-            "id": r[0],
-            "ticker": r[1],
-            "company_name": r[2],
-            "sector": r[3],
-            "period": r[4],
-            "payment_per_share": float(r[5]) if r[5] is not None else None,
-            "currency": r[6],
-            "yield_percent": float(r[7]) if r[7] is not None else None,
-            "record_date_estimate": r[8],
-            "capitalization_mln_rub": float(r[9]) if r[9] is not None else None,
-            "dsi": float(r[10]) if r[10] is not None else None,
-            "parsed_at": r[11],
+            "id": div.id,
+            "ticker": div.ticker,
+            "company_name": div.company_name,
+            "sector": div.sector,
+            "period": div.period,
+            "payment_per_share": float(div.payment_per_share) if div.payment_per_share is not None else None,
+            "currency": div.currency,
+            "yield_percent": float(div.yield_percent) if div.yield_percent is not None else None,
+            "record_date_estimate": div.record_date_estimate,
+            "capitalization_mln_rub": float(div.capitalization_mln_rub) if div.capitalization_mln_rub is not None else None,
+            "dsi": float(div.dsi) if div.dsi is not None else None,
+            "parsed_at": div.parsed_at,
         }
-        for r in rows
+        for div in divs
     ]
 
 
 @app.get("/api/logs")
-def api_logs(limit: int = 200):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT l.id, s.name, s.url, l.celery_task_id, l.status,
-               l.items_parsed, l.started_at, l.finished_at, l.duration_seconds,
-               l.error_code, l.error_message
-        FROM logs l
-        JOIN source s ON s.id = l.source_id
-        ORDER BY l.started_at DESC NULLS LAST, l.id DESC
-        LIMIT %s;
-        """,
-        (limit,),
+async def api_logs(
+    limit: int = 200,
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Получение логов выполнения парсеров"""
+    stmt = (
+        select(Log, Source)
+        .join(Source, Log.source_id == Source.id)
+        .order_by(Log.started_at.desc().nullslast(), Log.id.desc())
+        .limit(limit)
     )
-    rows = cur.fetchall()
-    conn.close()
-
+    result = await session.execute(stmt)
+    rows = result.all()
+    
     return [
         {
-            "id": r[0],
-            "source_name": r[1],
-            "source_url": r[2],
-            "celery_task_id": r[3],
-            "status": r[4],
-            "items_parsed": r[5],
-            "started_at": r[6],
-            "finished_at": r[7],
-            "duration_seconds": r[8],
-            "error_code": r[9],
-            "error_message": r[10],
+            "id": log.id,
+            "source_name": source.name,
+            "source_url": source.url,
+            "celery_task_id": log.celery_task_id,
+            "status": log.status,
+            "items_parsed": log.items_parsed,
+            "started_at": log.started_at,
+            "finished_at": log.finished_at,
+            "duration_seconds": log.duration_seconds,
+            "error_code": log.error_code,
+            "error_message": log.error_message,
         }
-        for r in rows
+        for log, source in rows
     ]
 
 
 @app.get("/api/status")
-def api_status():
+async def api_status(session: AsyncSession = Depends(get_async_session)):
     """
     Последний статус по каждому source (RBC/SmartLab/Dohod)
     """
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT s.id, s.name, s.url,
-               l.status, l.started_at, l.finished_at, l.duration_seconds, l.error_message
-        FROM source s
-        LEFT JOIN (
-            SELECT DISTINCT ON (source_id)
-                source_id, status, started_at, finished_at, duration_seconds, error_message
-            FROM logs
-            ORDER BY source_id, started_at DESC NULLS LAST, id DESC
-        ) l ON l.source_id = s.id
-        ORDER BY s.id;
-        """
-    )
-    rows = cur.fetchall()
-    conn.close()
+    # Получаем все источники
+    sources_stmt = select(Source).order_by(Source.id)
+    sources_result = await session.execute(sources_stmt)
+    sources = sources_result.scalars().all()
+    
+    result = []
+    for source in sources:
+        # Получаем последний лог для каждого источника
+        log_stmt = (
+            select(Log)
+            .where(Log.source_id == source.id)
+            .order_by(Log.started_at.desc().nullslast(), Log.id.desc())
+            .limit(1)
+        )
+        log_result = await session.execute(log_stmt)
+        log = log_result.scalar_one_or_none()
+        
+        result.append({
+            "source_id": source.id,
+            "name": source.name,
+            "url": source.url,
+            "status": log.status if log else "NO_RUNS",
+            "started_at": log.started_at if log else None,
+            "finished_at": log.finished_at if log else None,
+            "duration_seconds": log.duration_seconds if log else None,
+            "error_message": log.error_message if log else None,
+        })
+    
+    return result
 
-    return [
-        {
-            "source_id": r[0],
-            "name": r[1],
-            "url": r[2],
-            "status": r[3] or "NO_RUNS",
-            "started_at": r[4],
-            "finished_at": r[5],
-            "duration_seconds": r[6],
-            "error_message": r[7],
-        }
-        for r in rows
-    ]
 
 @app.get("/api/rbc_news/{news_id}")
-def rbc_news_one(news_id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, title, url, text, parsed_at
-        FROM rbc_news
-        WHERE id = %s
-        """,
-        (news_id,),
-    )
-    row = cur.fetchone()
-    conn.close()
-
-    if not row:
+async def rbc_news_one(
+    news_id: int,
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Получение одной новости RBC по ID"""
+    stmt = select(RBCNews).where(RBCNews.id == news_id)
+    result = await session.execute(stmt)
+    news = result.scalar_one_or_none()
+    
+    if not news:
         raise HTTPException(status_code=404, detail="News not found")
-
+    
     return {
-        "id": row[0],
-        "title": row[1],
-        "url": row[2],
-        "text": row[3],
-        "parsed_at": row[4],
+        "id": news.id,
+        "title": news.title,
+        "url": news.url,
+        "text": news.text,
+        "parsed_at": news.parsed_at,
     }
 
 
 @app.get("/api/data/smartlab/history")
-def smartlab_history(ticker: str, limit: int = 50000):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT parsed_at, last_price_rub
-        FROM smartlab_stocks
-        WHERE ticker = %s AND last_price_rub IS NOT NULL
-        ORDER BY parsed_at ASC, id ASC
-        LIMIT %s;
-    """, (ticker, limit))
-    rows = cur.fetchall()
-    conn.close()
-    return [{"parsed_at": r[0], "last_price_rub": float(r[1])} for r in rows]
+async def smartlab_history(
+    ticker: str,
+    limit: int = 50000,
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Получение истории цен акции по тикеру"""
+    stmt = (
+        select(SmartlabStock.parsed_at, SmartlabStock.last_price_rub)
+        .where(
+            SmartlabStock.ticker == ticker,
+            SmartlabStock.last_price_rub.isnot(None)
+        )
+        .order_by(SmartlabStock.parsed_at.asc(), SmartlabStock.id.asc())
+        .limit(limit)
+    )
+    result = await session.execute(stmt)
+    rows = result.all()
+    
+    return [
+        {
+            "parsed_at": row[0],
+            "last_price_rub": float(row[1]) if row[1] is not None else None
+        }
+        for row in rows
+    ]

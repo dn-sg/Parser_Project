@@ -58,6 +58,10 @@ README.md
 - Dashboard: http://localhost:8501
 - Flower (Celery): http://localhost:5555
 
+## Документация
+
+- [Схема базы данных](docs/DATABASE_SCHEMA.md) - ER-диаграмма и описание таблиц БД
+
 ## Команды
 
 См. `Makefile` для доступных команд:
