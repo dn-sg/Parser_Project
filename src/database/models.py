@@ -1,6 +1,3 @@
-"""
-SQLAlchemy models for database tables
-"""
 from datetime import datetime, date
 from decimal import Decimal
 from sqlalchemy import (

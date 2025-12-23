@@ -1,6 +1,3 @@
-"""
-Database utilities for Celery tasks using SQLAlchemy
-"""
 from datetime import datetime
 from sqlalchemy import func as sql_func
 from src.database import get_sync_session, Source, Log

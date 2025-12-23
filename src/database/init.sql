@@ -75,7 +75,6 @@ CREATE INDEX idx_dohod_ticker ON dohod_divs(ticker);
 CREATE INDEX idx_rbc_url ON rbc_news(url);
 CREATE INDEX idx_smartlab_ticker ON smartlab_stocks(ticker);
 
--- Начальные данные
 INSERT INTO source (url, name) VALUES
     ('https://www.rbc.ru/quote', 'RBC'),
     ('https://smart-lab.ru/q/shares/', 'SmartLab'),

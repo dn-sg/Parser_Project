@@ -1,6 +1,3 @@
-"""
-Celery tasks package
-"""
 from src.tasks.celery_app import celery
 from src.tasks.parser_tasks import (
     task_parse_smartlab,

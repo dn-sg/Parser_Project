@@ -1,7 +1,3 @@
-"""
-Парсер для сайта RBC (РБК) - новости
-Сканирует главную страницу, находит URL новостей, переходит по ним и извлекает заголовки
-"""
 from .base_parser import BaseParser
 from bs4 import BeautifulSoup
 from typing import List, Dict

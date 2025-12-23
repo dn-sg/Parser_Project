@@ -1,4 +1,0 @@
-"""
-Parser Project - Main package
-"""
-

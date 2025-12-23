@@ -5,7 +5,7 @@ from src.utils.api_client import get_json
 
 st.set_page_config(page_title="SmartLab Stocks", layout="wide")
 
-st.title("📈 SmartLab Акции")
+st.title("SmartLab Акции")
 
 # Табличные данные
 data = get_json("/api/data/smartlab?limit=2000")
@@ -17,7 +17,7 @@ if df.empty:
 
 df["parsed_at"] = pd.to_datetime(df["parsed_at"], errors="coerce")
 
-st.subheader("🔍 Фильтры")
+st.subheader("Фильтры")
 
 c1, c2, c3 = st.columns([2, 4, 4])
 
@@ -42,11 +42,11 @@ if q:
     df_view = df_view[df_view["name"].str.contains(q, case=False, na=False)]
 
 st.divider()
-st.subheader("📊 Данные акций")
+st.subheader("Данные акций")
 st.dataframe(df_view, use_container_width=True)
 
 st.divider()
-st.subheader("📉 График цены")
+st.subheader("График цены")
 
 available_tickers = sorted(df_view["ticker"].dropna().unique().tolist())
 

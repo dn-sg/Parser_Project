@@ -1,6 +1,3 @@
-"""
-Streamlit Dashboard - Main entry point
-"""
 import streamlit as st
 
 st.set_page_config(

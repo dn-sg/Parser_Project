@@ -1,6 +1,3 @@
-"""
-Парсер для раздела дивидендов сайта Dohod.ru
-"""
 from .base_parser import BaseParser
 from bs4 import BeautifulSoup
 from typing import List, Dict, Optional

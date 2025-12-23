@@ -1,6 +1,3 @@
-"""
-Database models and connections
-"""
 from src.database.models import (
     Base,
     Source,

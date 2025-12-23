@@ -4,7 +4,7 @@ from src.utils.api_client import get_json
 
 st.set_page_config(page_title="RBC News", layout="wide")
 
-st.title("📰 RBC Новости")
+st.title("RBC Новости")
 
 data = get_json("/api/data/rbc?limit=500")
 df = pd.DataFrame(data)
@@ -45,14 +45,14 @@ if q:
 df_view = df_view.sort_values(["parsed_at"], ascending=False).head(int(limit))
 
 st.divider()
-st.subheader("📋 Новости")
+st.subheader("Новости")
 
 # Таблица для отображения и выбора новости
 displayed_df = df_view[["parsed_at", "title"]].copy()
 st.dataframe(displayed_df, use_container_width=True)
 
 st.divider()
-st.subheader("📖 Просмотр новости")
+st.subheader("Просмотр новости")
 
 news_ids = df_view["id"].tolist()
 if news_ids:

@@ -1,6 +1,3 @@
-"""
-Celery tasks for parsers
-"""
 from celery.utils.log import get_task_logger
 
 from src.tasks.celery_app import celery

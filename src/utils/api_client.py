@@ -1,6 +1,3 @@
-"""
-API client utilities for Streamlit
-"""
 import os
 import requests
 
