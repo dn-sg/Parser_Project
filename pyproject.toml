@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parser-project"
+version = "0.1.0"
+description = "Parser project for scraping financial news and stock data"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # Core dependencies
+    "celery",
+    "redis",
+    "flower",
+    # Web frameworks
+    "fastapi",
+    "uvicorn",
+    "streamlit",
+    # Database
+    "pg8000",
+    "python-dotenv",
+    "sqlalchemy",
+    "asyncpg",
+    "pydantic-settings",
+    # Parsing
+    "beautifulsoup4",
+    "requests",
+    # Data processing
+    "pandas",
+    "plotly",
+    # Testing
+    "pytest",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest-cov",
+    "black",
+    "flake8",
+    "mypy",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

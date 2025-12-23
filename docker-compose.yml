@@ -10,7 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./src/database/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -38,11 +38,10 @@ services:
 
   web:
     build:
-      context: ./web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: infra/docker/api.dockerfile
     container_name: scraper_web
-    # FastAPI instead of Flask:
-    command: uvicorn app:app --host 0.0.0.0 --port 8000
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -55,8 +54,8 @@ services:
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
-      - ./web:/app
-      - ./parsers:/app/parsers
+      - ./src:/app/src
+      - ./requirements.txt:/app/requirements.txt
     depends_on:
       db:
         condition: service_healthy
@@ -68,10 +67,10 @@ services:
 
   celery_worker:
     build:
-      context: ./web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: infra/docker/worker.dockerfile
     container_name: scraper_celery_worker
-    command: celery -A tasks worker --loglevel=info
+    command: celery -A src.tasks worker --loglevel=info
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -82,8 +81,8 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       PYTHONPATH: /app
     volumes:
-      - ./web:/app
-      - ./parsers:/app/parsers
+      - ./src:/app/src
+      - ./requirements.txt:/app/requirements.txt
     depends_on:
       db:
         condition: service_healthy
@@ -95,10 +94,10 @@ services:
 
   flower:
     build:
-      context: ./web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: infra/docker/worker.dockerfile
     container_name: scraper_flower
-    command: celery -A tasks flower --port=5555 --address=0.0.0.0
+    command: celery -A src.tasks flower --port=5555 --address=0.0.0.0
     environment:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
@@ -113,23 +112,23 @@ services:
 
   dashboard:
     build:
-      context: ./web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: infra/docker/web.dockerfile
     container_name: scraper_dashboard
-    command: streamlit run dashboard.py --server.address 0.0.0.0 --server.port 8501
+    command: streamlit run src/web/main.py --server.address 0.0.0.0 --server.port 8501
     environment:
       API_BASE: http://web:8000
       PYTHONPATH: /app
     ports:
       - "8501:8501"
     volumes:
-      - ./web:/app
+      - ./src:/app/src
+      - ./requirements.txt:/app/requirements.txt
     depends_on:
       - web
     networks:
       - scraper_network
     restart: unless-stopped
-
 
 
 networks:
