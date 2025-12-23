@@ -3,8 +3,7 @@ from unittest.mock import MagicMock, patch, Mock
 from src.parsers.sources.base_parser import BaseParser
 
 
-# --- Тесты инициализации ---
-
+# Тесты инициализации
 def test_init_with_default_headers():
     """Тест инициализации с дефолтными заголовками"""
     parser = BaseParser("https://example.com")
@@ -22,8 +21,7 @@ def test_init_with_custom_headers():
     assert parser.session.headers['User-Agent'] == 'Custom Agent'
 
 
-# --- Тесты fetch_html ---
-
+# Тесты fetch_html
 def test_fetch_html_success():
     """Тест успешного получения HTML"""
     parser = BaseParser("https://example.com")
@@ -59,8 +57,7 @@ def test_fetch_html_http_error():
         assert html is None
 
 
-# --- Тесты to_json ---
-
+# Тесты to_json
 def test_to_json():
     """Тест преобразования данных в JSON"""
     parser = BaseParser("https://example.com")
@@ -73,7 +70,6 @@ def test_to_json():
     assert isinstance(json_str, str)
     assert "Test" in json_str
     assert "123" in json_str
-    # Проверяем, что это валидный JSON
     import json
     parsed = json.loads(json_str)
     assert len(parsed) == 2
@@ -96,8 +92,7 @@ def test_to_json_unicode():
     assert "Значение" in json_str
 
 
-# --- Тесты NotImplementedError ---
-
+# Тесты NotImplementedError
 def test_parse_not_implemented():
     """Тест, что parse() выбрасывает NotImplementedError"""
     parser = BaseParser("https://example.com")
@@ -112,13 +107,11 @@ def test_save_to_db_not_implemented():
         parser.save_to_db([{"test": "data"}])
 
 
-# --- Тесты get_parsed_data ---
-
+# Тесты get_parsed_data
 def test_get_parsed_data():
     """Тест получения данных в формате JSON"""
     parser = BaseParser("https://example.com")
-    
-    # Мокаем parse() чтобы вернуть тестовые данные
+
     test_data = [{"name": "Test", "value": 123}]
     with patch.object(parser, 'parse', return_value=test_data):
         result = parser.get_parsed_data()
@@ -136,8 +129,7 @@ def test_get_parsed_data_empty():
         assert result == "[]"
 
 
-# --- Тесты _get_db_connection ---
-
+# Тесты _get_db_connection
 def test_get_db_session():
     """Тест создания сессии БД через SQLAlchemy"""
     parser = BaseParser("https://example.com")

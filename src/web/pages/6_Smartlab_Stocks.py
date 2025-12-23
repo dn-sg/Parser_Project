@@ -7,7 +7,7 @@ st.set_page_config(page_title="SmartLab Stocks", layout="wide")
 
 st.title("📈 SmartLab Акции")
 
-# Табличные данные (для фильтров/таблицы оставляем быстрый endpoint с limit)
+# Табличные данные
 data = get_json("/api/data/smartlab?limit=2000")
 df = pd.DataFrame(data)
 
@@ -17,7 +17,6 @@ if df.empty:
 
 df["parsed_at"] = pd.to_datetime(df["parsed_at"], errors="coerce")
 
-# ---- ФИЛЬТРЫ ВСЕГДА ВИДНЫ (БЕЗ CHECKBOX) ----
 st.subheader("🔍 Фильтры")
 
 c1, c2, c3 = st.columns([2, 4, 4])
@@ -32,7 +31,7 @@ with c2:
 with c3:
     q = st.text_input("Поиск по name")
 
-# ---- ПРИМЕНЯЕМ ФИЛЬТРЫ ----
+# Применяю фильтры
 df_view = df.copy()
 df_view = df_view.head(int(limit))
 
@@ -42,12 +41,10 @@ if sel:
 if q:
     df_view = df_view[df_view["name"].str.contains(q, case=False, na=False)]
 
-# ---- ТАБЛИЦА НИЖЕ ----
 st.divider()
 st.subheader("📊 Данные акций")
 st.dataframe(df_view, use_container_width=True)
 
-# ---- ГРАФИК ЦЕНЫ ПО ВЫБРАННОЙ АКЦИИ ----
 st.divider()
 st.subheader("📉 График цены")
 
@@ -57,7 +54,7 @@ if not available_tickers:
     st.info("Нет доступных акций для отображения графика")
     st.stop()
 
-# ✅ поиск тикера текстом
+# Поиск тикера текстом
 ticker_query = st.text_input("Поиск тикера для графика (ввод текста):", value="")
 filtered_tickers = available_tickers
 
@@ -70,7 +67,7 @@ if not filtered_tickers:
 
 selected_ticker = st.selectbox("Выберите акцию для графика:", filtered_tickers)
 
-# ---- История по тикеру (полная) ----
+# История по тикеру
 history = get_json(f"/api/data/smartlab/history?ticker={selected_ticker}&limit=50000")
 ticker_data = pd.DataFrame(history)
 
@@ -86,7 +83,7 @@ if ticker_data.empty:
     st.warning(f"Недостаточно данных для построения графика {selected_ticker}")
     st.stop()
 
-# ---- График ----
+# График
 fig = go.Figure()
 fig.add_trace(
     go.Scatter(
@@ -110,7 +107,7 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
-# ---- Метрики (текущая, Δ24ч руб, Δ24ч %) ----
+# Метрики
 last_ts = ticker_data["parsed_at"].max()
 cutoff = last_ts - pd.Timedelta(hours=24)
 
@@ -120,7 +117,6 @@ has_24h = not base_candidates.empty
 if has_24h:
     base_price = float(base_candidates["last_price_rub"].iloc[-1])
 else:
-    # Если истории за 24ч нет — fallback на самую раннюю точку (чтобы метрики не "ломались")
     base_price = float(ticker_data["last_price_rub"].iloc[0])
 
 current_price = float(ticker_data["last_price_rub"].iloc[-1])

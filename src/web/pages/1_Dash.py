@@ -6,27 +6,25 @@ st.set_page_config(page_title="Dashboard", layout="wide")
 
 st.title("📊 Главный Дашборд")
 
-# ====== ДОБАВЛЕНО: запуск парсеров по кнопке ======
+# Запуск парсеров по кнопке
 st.subheader("🚀 Запуск парсеров")
 
 b1, b2, b3 = st.columns(3)
 
 if b1.button("Запустить SmartLab", use_container_width=True):
     res = post_json("/api/run/smartlab")
-    st.success(f"SmartLab запущен, task_id={res.get('task_id')}")  # /api/run/{source} возвращает task_id [file:1]
+    st.success(f"SmartLab запущен, task_id={res.get('task_id')}")
 
 if b2.button("Запустить RBC", use_container_width=True):
     res = post_json("/api/run/rbc")
-    st.success(f"RBC запущен, task_id={res.get('task_id')}")  # /api/run/{source} возвращает task_id [file:1]
+    st.success(f"RBC запущен, task_id={res.get('task_id')}")
 
 if b3.button("Запустить Dohod", use_container_width=True):
     res = post_json("/api/run/dohod")
-    st.success(f"Dohod запущен, task_id={res.get('task_id')}")  # /api/run/{source} возвращает task_id [file:1]
-
+    st.success(f"Dohod запущен, task_id={res.get('task_id')}")
 st.divider()
-# ====== /ДОБАВЛЕНО ======
 
-# Получаем статистику
+# Получаю статистику
 try:
     stats = get_json("/api/stats")
     status_data = get_json("/api/status")
@@ -34,23 +32,7 @@ except Exception as e:
     st.error(f"Ошибка загрузки данных: {e}")
     st.stop()
 
-# # ---- ФИЛЬТРЫ ВСЕГДА ВИДНЫ (БЕЗ CHECKBOX) ----
-# st.subheader("🔍 Фильтры")
-#
-# col1, col2, col3 = st.columns(3)
-#
-# with col1:
-#     show_stats = st.checkbox("Показать статистику", value=True)
-#
-# with col2:
-#     show_status = st.checkbox("Показать статус парсеров", value=True)
-#
-# with col3:
-#     refresh = st.button("🔄 Обновить")
-#
-# st.divider()
-
-# ---- СТАТИСТИКА ----
+# Статистика
 st.subheader("📈 Статистика собираемых данных")
 
 col1, col2, col3 = st.columns(3)
@@ -66,18 +48,18 @@ with col3:
 
 st.divider()
 
-# ---- СТАТУС ПАРСЕРОВ ----
+# Статус парсеров
 st.subheader("⚙️ Статус парсеров")
 
 status_df = pd.DataFrame(status_data)
 
-# Форматируем таблицу для лучшего отображения
+# Форматирую таблицу
 display_cols = ["name", "url", "status", "started_at", "duration_seconds"]
 if all(col in status_df.columns for col in display_cols):
     status_display = status_df[display_cols].copy()
     status_display.columns = ["Название", "URL", "Статус", "Начало", "Длительность (сек)"]
 
-    # Форматируем статус цветом
+    # Форматирую статус цветом
     def status_color(status):
         if status == "SUCCESS":
             return "🟢 SUCCESS"

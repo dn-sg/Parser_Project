@@ -4,16 +4,14 @@ from bs4 import BeautifulSoup, Tag
 from src.parsers.sources.smartlab import SmartlabParser
 
 
-# --- Фикстура для парсера ---
+# Фикстура для парсера
 @pytest.fixture
 def parser():
     """Создает экземпляр парсера для каждого теста"""
     return SmartlabParser("https://smart-lab.ru/q/shares/")
 
 
-# --- Тесты вспомогательных методов ---
-
-
+# Тесты вспомогательных методов
 def test_extract_cell_text_simple(parser):
     """Тест извлечения текста из простой ячейки"""
     html = "<tr><td class='test'>Текст ячейки</td></tr>"
@@ -92,9 +90,7 @@ def test_clean_number_invalid(parser):
     assert parser._clean_number("---") == 0.0
 
 
-# --- Тесты основной логики парсинга ---
-
-
+# Тесты основной логики парсинга
 def test_parse_success(parser):
     """Тест успешного парсинга таблицы"""
     mock_html = """
@@ -230,10 +226,7 @@ def test_parse_bad_row(parser):
 
     with patch.object(parser, "fetch_html", return_value=mock_html):
         result = parser.parse()
-        # Парсер может добавить обе строки (битую с дефолтными значениями и нормальную)
-        # Проверяем что есть нормальная строка
         assert len(result) >= 1
-        # Находим нормальную строку по тикеру
         test_row = [r for r in result if r.get("ticker") == "TEST"]
         assert len(test_row) == 1
         assert test_row[0]["ticker"] == "TEST"
@@ -336,9 +329,7 @@ def test_run_smartlab_parser_handles_exception():
             mock_error.assert_called()
 
 
-# --- Тесты сохранения в БД ---
-
-
+# Тесты сохранения в БД
 def test_save_to_db(parser):
     """Тест сохранения данных в БД через SQLAlchemy"""
     fake_data = [
@@ -361,8 +352,7 @@ def test_save_to_db(parser):
     mock_source = MagicMock()
     mock_source.id = 1
     mock_source.name = "SmartLab"
-    
-    # Мокаем query для получения источника
+
     mock_query = MagicMock()
     mock_query.filter.return_value.first.return_value = mock_source
     mock_session.query.return_value = mock_query
@@ -370,16 +360,12 @@ def test_save_to_db(parser):
     with patch.object(parser, "_get_db_session", return_value=mock_session):
         parser.save_to_db(fake_data)
 
-        # Проверяем, что сессия была получена
         parser._get_db_session.assert_called_once()
 
-        # Проверяем, что был запрос источника
         mock_session.query.assert_called()
 
-        # Проверяем, что был add для добавления записи
         assert mock_session.add.called
 
-        # Проверяем, что был commit
         mock_session.commit.assert_called_once()
         mock_session.close.assert_called_once()
 
@@ -408,7 +394,6 @@ def test_save_to_db_source_not_found(parser):
     }]
 
     mock_session = MagicMock()
-    # Источник не найден
     mock_query = MagicMock()
     mock_query.filter.return_value.first.return_value = None
     mock_session.query.return_value = mock_query
@@ -416,9 +401,7 @@ def test_save_to_db_source_not_found(parser):
     with patch.object(parser, "_get_db_session", return_value=mock_session):
         parser.save_to_db(fake_data)
 
-        # Должен попробовать найти источник
         mock_session.query.assert_called()
-        # Но не должен делать add
         mock_session.add.assert_not_called()
 
 
@@ -451,7 +434,6 @@ def test_save_to_db_rollback_on_error(parser):
     with patch.object(parser, "_get_db_session", return_value=mock_session):
         parser.save_to_db(fake_data)
 
-        # Проверяем, что был вызван rollback
         mock_session.rollback.assert_called_once()
 
 
@@ -483,13 +465,8 @@ def test_save_to_db_cleans_numbers(parser):
     with patch.object(parser, "_get_db_session", return_value=mock_session):
         parser.save_to_db(fake_data)
 
-        # Проверяем, что add был вызван с данными
         assert mock_session.add.called
-        # Проверяем, что commit был вызван
         mock_session.commit.assert_called_once()
-
-
-# --- Дополнительные тесты для увеличения покрытия ---
 
 
 def test_extract_cell_text_without_class_name(parser):
@@ -504,7 +481,6 @@ def test_extract_cell_text_without_class_name(parser):
 
 def test_extract_cell_text_type_error(parser):
     """Тест обработки TypeError при извлечении текста"""
-    # Создаем объект, который вызовет TypeError при вызове find
     class BadRow:
         def find(self, *args, **kwargs):
             raise TypeError("Bad type")
@@ -519,8 +495,7 @@ def test_extract_cell_text_attribute_error_in_get_text(parser):
     html = "<tr><td class='test'>Текст</td></tr>"
     soup = BeautifulSoup(html, "html.parser")
     row = soup.find("tr")
-    
-    # Мокаем cell.get_text чтобы вызвать AttributeError
+
     cell = row.find("td", class_="test")
     with patch.object(cell, "get_text", side_effect=AttributeError("No get_text")):
         text = parser._extract_cell_text(row, "td", "test")
@@ -537,7 +512,6 @@ def test_clean_number_multiple_operations(parser):
     """Тест очистки числа с несколькими операциями"""
     assert parser._clean_number("+1 234.56%") == 1234.56
     assert parser._clean_number("-50.5%") == -50.5
-    # Запятая заменяется на точку, но если уже есть точка, то будет ошибка парсинга
     assert parser._clean_number("1,234") == 1.234
 
 
@@ -701,7 +675,6 @@ def test_save_to_db_multiple_items(parser):
     with patch.object(parser, "_get_db_session", return_value=mock_session):
         parser.save_to_db(fake_data)
 
-        # Должно быть вызвано add дважды (для двух записей)
         assert mock_session.add.call_count == 2
         mock_session.commit.assert_called_once()
 
@@ -723,7 +696,6 @@ def test_save_to_db_connection_error(parser):
     }]
 
     with patch.object(parser, "_get_db_session", side_effect=Exception("Connection error")):
-        # Не должно быть исключения, только логирование
         parser.save_to_db(fake_data)
 
 
@@ -782,14 +754,11 @@ def test_save_to_db_close_error(parser):
     mock_session.close.side_effect = Exception("Close error")
 
     with patch.object(parser, "_get_db_session", return_value=mock_session):
-        # Исключение при close все равно будет выброшено, но это нормально
-        # Проверяем что до этого все выполнилось
         try:
             parser.save_to_db(fake_data)
         except Exception:
-            pass  # Ожидаемое исключение при close
-        
-        # Проверяем что commit был вызван до ошибки close
+            pass
+
         mock_session.commit.assert_called_once()
 
 
@@ -859,5 +828,4 @@ def test_parse_exception_in_row_processing(parser):
     with patch.object(parser, "fetch_html", return_value=mock_html):
         with patch.object(parser, "_extract_cell_text", side_effect=side_effect):
             result = parser.parse()
-            # Должна быть обработана ошибка и строка пропущена
             assert len(result) == 0

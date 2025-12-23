@@ -15,7 +15,6 @@ if df.empty:
 if "started_at" in df.columns:
     df["started_at"] = pd.to_datetime(df["started_at"], errors="coerce")
 
-# ---- ФИЛЬТРЫ НАД ТАБЛИЦЕЙ (по умолчанию пустые) ----
 c1, c2, c3, c4 = st.columns([2, 3, 3, 2])
 
 with c1:

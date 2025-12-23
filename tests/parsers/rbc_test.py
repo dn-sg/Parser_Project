@@ -3,15 +3,14 @@ from unittest.mock import MagicMock, patch, Mock
 from src.parsers.sources.rbc import RBCParser
 
 
-# --- Фикстура для парсера ---
+# Фикстура для парсера
 @pytest.fixture
 def parser():
     """Создает экземпляр парсера для каждого теста"""
     return RBCParser()
 
 
-# --- Тесты извлечения заголовков ---
-
+# Тесты извлечения заголовков
 def test_extract_title_from_h1(parser):
     """Тест извлечения заголовка из h1"""
     mock_html = """
@@ -101,8 +100,7 @@ def test_extract_title_404_error(parser):
         assert title == ""
 
 
-# --- Тесты извлечения текста ---
-
+# Тесты извлечения текста
 def test_extract_text_from_article(parser):
     """Тест извлечения текста из article тега"""
     mock_html = """
@@ -125,7 +123,7 @@ def test_extract_text_from_article(parser):
         text = parser._extract_text_from_page("https://www.rbc.ru/test")
         assert "Первый параграф" in text
         assert "Второй параграф" in text
-        assert "Короткий" not in text  # Слишком короткий параграф
+        assert "Короткий" not in text
 
 
 def test_extract_text_from_content_div(parser):
@@ -174,8 +172,6 @@ def test_extract_text_filters_advertising(parser):
         text = parser._extract_text_from_page("https://www.rbc.ru/test")
         assert "Основной текст" in text
         assert "Еще один параграф" in text
-        # Реклама должна быть отфильтрована, но может быть в тексте если article не найден
-        # Проверяем что основной текст есть
         assert len(text) > 50
 
 
@@ -206,8 +202,7 @@ def test_extract_text_filters_photo_video(parser):
         assert "Видео:" not in text
 
 
-# --- Тесты основной логики парсинга ---
-
+# Тесты основной логики парсинга
 def test_parse_finds_news_urls(parser):
     """Тест поиска URL новостей на главной странице"""
     mock_html = """
@@ -220,15 +215,12 @@ def test_parse_finds_news_urls(parser):
     </body>
     </html>
     """
-    
-    # Мокаем fetch_html для главной страницы
+
     with patch.object(parser, 'fetch_html', return_value=mock_html):
-        # Мокаем извлечение заголовков и текста для каждой новости
         with patch.object(parser, '_extract_title_from_page', return_value="Заголовок"):
             with patch.object(parser, '_extract_text_from_page', return_value="Текст"):
                 result = parser.parse()
-                
-                # Должны найти 2 новости (не раздел и не внешняя ссылка)
+
                 assert len(result) == 2
                 assert all('title' in item for item in result)
                 assert all('url' in item for item in result)
@@ -251,8 +243,7 @@ def test_parse_filters_sections(parser):
         with patch.object(parser, '_extract_title_from_page', return_value="Заголовок"):
             with patch.object(parser, '_extract_text_from_page', return_value="Текст"):
                 result = parser.parse()
-                
-                # Должна быть только одна новость (не разделы)
+
                 assert len(result) == 1
                 assert "politics/07/12/2025" in result[0]['url']
 
@@ -273,21 +264,15 @@ def test_parse_empty_html(parser):
 
 def test_parse_handles_exception(parser):
     """Тест обработки исключений при парсинге"""
-    # Парсер должен обрабатывать исключения внутри метода parse
-    # Используем side_effect для имитации ошибки
     with patch.object(parser, 'fetch_html', side_effect=Exception("Ошибка")):
-        # parse() должен вернуть пустой список при исключении
         try:
             result = parser.parse()
             assert result == []
         except Exception:
-            # Если исключение не обработано, это тоже нормально для теста
-            # но лучше чтобы оно обрабатывалось
             pass
 
 
-# --- Тесты сохранения в БД ---
-
+# Тесты сохранения в БД 
 def test_save_to_db(parser):
     """Тест сохранения новостей в БД через SQLAlchemy"""
     fake_data = [{
@@ -307,17 +292,13 @@ def test_save_to_db(parser):
     
     with patch.object(parser, '_get_db_session', return_value=mock_session):
         parser.save_to_db(fake_data)
-        
-        # Проверяем, что сессия была получена
+
         parser._get_db_session.assert_called_once()
-        
-        # Проверяем, что был запрос источника
+
         mock_session.query.assert_called()
-        
-        # Проверяем, что был execute для insert
+
         assert mock_session.execute.called or mock_session.add.called
-        
-        # Проверяем, что был commit
+
         mock_session.commit.assert_called_once()
         mock_session.close.assert_called_once()
 
@@ -335,15 +316,13 @@ def test_save_to_db_source_not_found(parser):
     
     mock_session = MagicMock()
     mock_query = MagicMock()
-    mock_query.filter.return_value.first.return_value = None  # Источник не найден
+    mock_query.filter.return_value.first.return_value = None
     mock_session.query.return_value = mock_query
     
     with patch.object(parser, '_get_db_session', return_value=mock_session):
         parser.save_to_db(fake_data)
-        
-        # Должен попробовать найти источник
+
         mock_session.query.assert_called()
-        # Но не должен делать add или execute
         mock_session.add.assert_not_called()
         if hasattr(mock_session, 'execute'):
             assert not mock_session.execute.called or mock_session.execute.call_count == 0
@@ -363,12 +342,8 @@ def test_save_to_db_rollback_on_error(parser):
     
     with patch.object(parser, '_get_db_session', return_value=mock_session):
         parser.save_to_db(fake_data)
-        
-        # Проверяем, что был вызван rollback
+
         mock_session.rollback.assert_called_once()
-
-
-# --- Дополнительные тесты для увеличения покрытия ---
 
 
 def test_extract_title_with_full_url(parser):
@@ -386,7 +361,6 @@ def test_extract_title_with_full_url(parser):
     mock_response.text = mock_html
     
     with patch.object(parser.session, 'get', return_value=mock_response):
-        # Тестируем с полным URL
         title = parser._extract_title_from_page("https://www.rbc.ru/test")
         assert title == "Заголовок новости"
 
@@ -406,7 +380,6 @@ def test_extract_title_with_relative_url(parser):
     mock_response.text = mock_html
     
     with patch.object(parser.session, 'get', return_value=mock_response):
-        # Тестируем с относительным URL
         title = parser._extract_title_from_page("/politics/07/12/2025/693599919a7947c64d803191")
         assert title == "Заголовок новости"
 
@@ -555,7 +528,6 @@ def test_parse_with_exception_in_extraction(parser):
         with patch.object(parser, '_extract_title_from_page', side_effect=Exception("Error")):
             with patch.object(parser, '_extract_text_from_page', return_value=""):
                 result = parser.parse()
-                # Должна быть обработана ошибка
                 assert isinstance(result, list)
 
 
@@ -575,8 +547,7 @@ def test_save_to_db_multiple_items(parser):
     
     with patch.object(parser, '_get_db_session', return_value=mock_session):
         parser.save_to_db(fake_data)
-        
-        # Должно быть вызвано execute дважды (для двух новостей)
+
         assert mock_session.execute.call_count == 2
         mock_session.commit.assert_called_once()
 
@@ -586,7 +557,6 @@ def test_save_to_db_connection_error(parser):
     fake_data = [{"title": "Тест", "url": "https://test.ru", "text": "Текст"}]
     
     with patch.object(parser, '_get_db_session', side_effect=Exception("Connection error")):
-        # Не должно быть исключения, только логирование
         parser.save_to_db(fake_data)
 
 
@@ -606,7 +576,7 @@ def test_save_to_db_close_error(parser):
         try:
             parser.save_to_db(fake_data)
         except Exception:
-            pass  # Ожидаемое исключение при close
+            pass
         
         mock_session.commit.assert_called_once()
 

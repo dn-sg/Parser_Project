@@ -16,7 +16,6 @@ if df.empty:
 if "record_date_estimate" in df.columns:
     df["record_date_estimate"] = pd.to_datetime(df["record_date_estimate"], errors="coerce").dt.date
 
-# ---- ФИЛЬТРЫ ВСЕГДА ВИДНЫ (БЕЗ CHECKBOX) ----
 st.subheader("🔍 Фильтры")
 
 c1, c2, c3, c4 = st.columns([2, 4, 2, 4])
@@ -40,7 +39,6 @@ with c4:
     sector_list = sorted(df["sector"].dropna().unique().tolist())
     sel_sectors = st.multiselect("sector", sector_list, default=[])
 
-# ---- ПРИМЕНЯЕМ ФИЛЬТРЫ ----
 df_view = df.copy()
 df_view = df_view.head(int(limit))
 
@@ -54,7 +52,6 @@ if date_range and len(date_range) == 2 and "record_date_estimate" in df_view.col
     start, end = date_range
     df_view = df_view[df_view["record_date_estimate"].between(start, end)]
 
-# ---- ТАБЛИЦА ниже ----
 st.divider()
 st.subheader("📋 Данные")
 st.dataframe(df_view, use_container_width=True)

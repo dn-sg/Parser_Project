@@ -50,7 +50,7 @@ def _log_finished(log_id: int, status: str, error_message: str | None = None, it
         log.finished_at = datetime.utcnow()
         log.items_parsed = items_parsed
         
-        # Вычисляем длительность в секундах
+        # Вычисляю длительность в секундах
         if log.started_at and log.finished_at:
             duration = (log.finished_at - log.started_at).total_seconds()
             log.duration_seconds = int(duration)

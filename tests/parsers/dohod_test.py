@@ -4,15 +4,14 @@ from datetime import date
 from src.parsers.sources.dohod import DohodParser  # Убедитесь, что импорт работает корректно
 
 
-# --- Фикстура для парсера ---
+# Фикстура для парсера
 @pytest.fixture
 def parser():
     """Создает экземпляр парсера для каждого теста"""
     return DohodParser()
 
 
-# --- Тесты вспомогательных методов (Unit tests) ---
-
+# Тесты вспомогательных методов
 def test_parse_float(parser):
     assert parser._parse_float("123,45") == 123.45
     assert parser._parse_float("1 234,56") == 1234.56
@@ -33,12 +32,10 @@ def test_parse_date(parser):
     assert parser._parse_date("01.01.2024") == date(2024, 1, 1)
     assert parser._parse_date("invalid") is None
     assert parser._parse_date("") is None
-    # Тест на неправильный формат
     assert parser._parse_date("2025-12-25") is None
 
 
-# --- Тесты основной логики парсинга (Mocking HTML) ---
-
+# Тесты основной логики парсинга
 def test_parse_success(parser):
     """Тестируем парсинг корректного куска HTML"""
 
@@ -74,7 +71,7 @@ def test_parse_success(parser):
     </html>
     """
 
-    # Подменяем метод fetch_html, чтобы он не лез в интернет, а возвращал нашу строку
+    # Подменяем метод fetch_html
     with patch.object(parser, "fetch_html", return_value=mock_html):
         result = parser.parse()
 
@@ -120,12 +117,11 @@ def test_parse_bad_row(parser):
         assert result[0]["ticker"] == "TEST"
 
 
-# --- Тест сохранения в БД (Mocking Database) ---
-
+# Тест сохранения в БД
 def test_save_to_db(parser):
     """Проверяем, что метод использует SQLAlchemy для сохранения в БД"""
 
-    # Подготовим фейковые данные
+    # Фейковые данные
     fake_data = [{
         "ticker": "TEST",
         "company_name": "Test Co",
@@ -139,7 +135,7 @@ def test_save_to_db(parser):
         "dsi": 1.0
     }]
 
-    # Создаем моки для сессии SQLAlchemy
+    # Моки для сессии
     mock_session = MagicMock()
     mock_source = MagicMock()
     mock_source.id = 1
@@ -148,22 +144,16 @@ def test_save_to_db(parser):
     mock_query.filter.return_value.first.return_value = mock_source
     mock_session.query.return_value = mock_query
 
-    # Подменяем _get_db_session в парсере
     with patch.object(parser, '_get_db_session', return_value=mock_session):
         parser.save_to_db(fake_data)
 
-        # Проверяем, что сессия была получена
         parser._get_db_session.assert_called_once()
 
-        # Проверяем, что был запрос источника
         mock_session.query.assert_called()
 
-        # Проверяем, что был add для добавления записи
         assert mock_session.add.called
 
-        # Проверяем, что был commit
         mock_session.commit.assert_called_once()
-        # Проверяем, что закрыли соединение
         mock_session.close.assert_called_once()
 
 
@@ -200,7 +190,6 @@ def test_save_to_db_source_not_found(parser):
     """Тест случая, когда в таблице source нет записи Dohod"""
     mock_session = MagicMock()
     mock_query = MagicMock()
-    # Имитируем, что источник не найден
     mock_query.filter.return_value.first.return_value = None
     mock_session.query.return_value = mock_query
 
@@ -209,9 +198,7 @@ def test_save_to_db_source_not_found(parser):
                            "payment_per_share": 1, "currency": "R", "yield_percent": 1,
                            "record_date_estimate": date.today(), "capitalization_mln_rub": 1, "dsi": 1}])
 
-        # Должен попробовать найти источник
         mock_session.query.assert_called()
-        # Но НЕ должен делать add
         mock_session.add.assert_not_called()
 
 
@@ -227,17 +214,12 @@ def test_save_to_db_rollback(parser):
     mock_query = MagicMock()
     mock_query.filter.return_value.first.return_value = mock_source
     mock_session.query.return_value = mock_query
-    # При попытке add вызываем ошибку
     mock_session.add.side_effect = Exception("DB Error")
 
     with patch.object(parser, '_get_db_session', return_value=mock_session):
         parser.save_to_db(data)
 
-        # Проверяем, что был вызван rollback
         mock_session.rollback.assert_called_once()
-
-
-# --- Дополнительные тесты для увеличения покрытия ---
 
 
 def test_run_dohod_parser_success():
@@ -312,8 +294,7 @@ def test_save_to_db_multiple_items(parser):
     
     with patch.object(parser, '_get_db_session', return_value=mock_session):
         parser.save_to_db(fake_data)
-        
-        # Должно быть вызвано add дважды (для двух записей)
+
         assert mock_session.add.call_count == 2
         mock_session.commit.assert_called_once()
 
@@ -325,7 +306,6 @@ def test_save_to_db_connection_error(parser):
                   "record_date_estimate": date.today(), "capitalization_mln_rub": 1, "dsi": 1}]
     
     with patch.object(parser, '_get_db_session', side_effect=Exception("Connection error")):
-        # Не должно быть исключения, только логирование
         parser.save_to_db(fake_data)
 
 
@@ -347,7 +327,7 @@ def test_save_to_db_close_error(parser):
         try:
             parser.save_to_db(fake_data)
         except Exception:
-            pass  # Ожидаемое исключение при close
-        
+            pass
+
         mock_session.commit.assert_called_once()
 

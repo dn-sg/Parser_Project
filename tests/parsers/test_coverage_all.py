@@ -7,11 +7,10 @@ import io
 def test_coverage_all_parsers() -> None:
     """Test coverage for all parsers"""
     this_file = pathlib.Path(__file__).resolve()
-    test_dir = this_file.parent  # tests/parsers/
-    tests_root = test_dir.parent  # tests/
-    project_root = tests_root.parent  # Parser_Project/
-    
-    # Парсеры теперь находятся в src/parsers/sources/
+    test_dir = this_file.parent
+    tests_root = test_dir.parent
+    project_root = tests_root.parent
+
     parsers_dir = project_root / "src" / "parsers" / "sources"
 
     test_files = [
@@ -35,7 +34,7 @@ def test_coverage_all_parsers() -> None:
         parsers_dir / "smartlab.py",
     ]
 
-    sink = io.StringIO()  # гасим табличный вывод report
+    sink = io.StringIO()
     total_report = float(cov.report(include=[str(f) for f in parser_files], file=sink))
 
     print(f"{total_report:.2f}")

@@ -15,7 +15,6 @@ if df.empty:
 
 df["parsed_at"] = pd.to_datetime(df["parsed_at"], errors="coerce")
 
-# ---- ФИЛЬТРЫ ВСЕГДА ВИДНЫ (БЕЗ CHECKBOX) ----
 st.subheader("🔍 Фильтры")
 
 c1, c2, c3 = st.columns([2, 3, 3])
@@ -34,7 +33,6 @@ with c2:
 with c3:
     q = st.text_input("title")
 
-# ---- ПРИМЕНЯЕМ ФИЛЬТРЫ ----
 df_view = df.copy()
 
 if date_range and len(date_range) == 2:
@@ -46,7 +44,6 @@ if q:
 
 df_view = df_view.sort_values(["parsed_at"], ascending=False).head(int(limit))
 
-# ---- ТАБЛИЦА ниже ----
 st.divider()
 st.subheader("📋 Новости")
 
@@ -54,7 +51,6 @@ st.subheader("📋 Новости")
 displayed_df = df_view[["parsed_at", "title"]].copy()
 st.dataframe(displayed_df, use_container_width=True)
 
-# ---- МОДАЛЬНОЕ ОКНО ДЛЯ ПРОСМОТРА ТЕКСТА НОВОСТИ ----
 st.divider()
 st.subheader("📖 Просмотр новости")
 
@@ -67,7 +63,7 @@ if news_ids:
             df_view[df_view["id"] == x]) > 0 else "N/A"
     )
 
-    # Получаем полный текст новости
+    # Получаю полный текст новости
     news_detail = get_json(f"/api/rbc_news/{selected_id}")
 
     if news_detail:
