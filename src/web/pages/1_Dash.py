@@ -59,7 +59,6 @@ if all(col in status_df.columns for col in display_cols):
     status_display = status_df[display_cols].copy()
     status_display.columns = ["Название", "URL", "Статус", "Начало", "Длительность (сек)"]
 
-    # Форматирую статус цветом
     def status_color(status):
         if status == "SUCCESS":
             return "🟢 SUCCESS"
