@@ -70,7 +70,7 @@ services:
       context: .
       dockerfile: infra/docker/worker.dockerfile
     container_name: scraper_celery_worker
-    command: celery -A src.tasks worker --loglevel=info
+    command: celery -A src.tasks.celery_app worker --loglevel=info
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -97,7 +97,7 @@ services:
       context: .
       dockerfile: infra/docker/worker.dockerfile
     container_name: scraper_flower
-    command: celery -A src.tasks flower --port=5555 --address=0.0.0.0
+    command: celery -A src.tasks.celery_app flower --port=5555 --address=0.0.0.0
     environment:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
