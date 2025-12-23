@@ -5,9 +5,14 @@ import io
 
 
 def test_coverage_all_parsers() -> None:
+    """Test coverage for all parsers"""
     this_file = pathlib.Path(__file__).resolve()
-    test_dir = this_file.parent
-    parsers_dir = test_dir.parent
+    test_dir = this_file.parent  # tests/parsers/
+    tests_root = test_dir.parent  # tests/
+    project_root = tests_root.parent  # Parser_Project/
+    
+    # Парсеры теперь находятся в src/parsers/sources/
+    parsers_dir = project_root / "src" / "parsers" / "sources"
 
     test_files = [
         test_dir / "base_parser_test.py",

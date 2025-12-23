@@ -302,7 +302,7 @@ def test_parse_handles_exception(parser):
 
 def test_run_smartlab_parser_success():
     """Тест успешного сценария run_smartlab_parser"""
-    from parsers import smartlab
+    from src.parsers.sources import smartlab
 
     with patch.object(smartlab, "logging") as mock_logging, patch.object(
         smartlab, "SmartlabParser"
@@ -322,7 +322,7 @@ def test_run_smartlab_parser_success():
 
 def test_run_smartlab_parser_handles_exception():
     """Тест обработки исключения внутри run_smartlab_parser"""
-    from parsers import smartlab
+    from src.parsers.sources import smartlab
 
     with patch.object(smartlab, "logging") as mock_logging, patch.object(
         smartlab, "SmartlabParser"

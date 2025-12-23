@@ -143,7 +143,7 @@ def test_get_db_connection():
     parser = BaseParser("https://example.com")
     
     mock_conn = MagicMock()
-    with patch('parsers.base_parser.pg8000.dbapi.connect', return_value=mock_conn):
+    with patch('src.parsers.sources.base_parser.pg8000.dbapi.connect', return_value=mock_conn):
         with patch.dict('os.environ', {
             'POSTGRES_HOST': 'test_host',
             'POSTGRES_PORT': '5433',
@@ -160,7 +160,7 @@ def test_get_db_connection_defaults():
     parser = BaseParser("https://example.com")
     
     mock_conn = MagicMock()
-    with patch('parsers.base_parser.pg8000.dbapi.connect', return_value=mock_conn) as mock_connect:
+    with patch('src.parsers.sources.base_parser.pg8000.dbapi.connect', return_value=mock_conn) as mock_connect:
         # Удаляем переменные окружения для host и port, чтобы проверить дефолты
         import os
         original_host = os.environ.pop('POSTGRES_HOST', None)
