@@ -21,7 +21,7 @@ st.subheader("Фильтры")
 c1, c2, c3, c4 = st.columns([2, 4, 2, 4])
 
 with c1:
-    limit = st.number_input("Кол-во строк", min_value=50, max_value=2000, value=2000, step=50)
+    limit = st.number_input("Кол-во строк", min_value=50, max_value=5000, value=2000, step=50)
 
 with c2:
     tickers = sorted(df["ticker"].dropna().unique().tolist())

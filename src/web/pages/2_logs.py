@@ -18,7 +18,7 @@ if "started_at" in df.columns:
 c1, c2, c3, c4 = st.columns([2, 3, 3, 2])
 
 with c1:
-    limit = st.number_input("Сколько строк показать", min_value=50, max_value=2000, value=2000, step=50)
+    limit = st.number_input("Сколько строк показать", min_value=50, max_value=5000, value=2000, step=50)
 
 with c2:
     if "source_name" in df.columns:
