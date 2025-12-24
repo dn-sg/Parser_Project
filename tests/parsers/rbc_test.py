@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch, Mock
-from src.parsers.sources.rbc import RBCParser
+from src.parsers.sources import RBCParser
 
 
 # Фикстура для парсера

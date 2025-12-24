@@ -1,15 +1,10 @@
-"""
-FastAPI application with async database connections using SQLAlchemy
-"""
-from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException, Depends
 from celery.result import AsyncResult
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, distinct
-from sqlalchemy.orm import selectinload
+from sqlalchemy import select, func
 
-from src.tasks import celery, task_parse_smartlab, task_parse_rbc, task_parse_dohod
-from src.database import (
+from src import celery, task_parse_smartlab, task_parse_rbc, task_parse_dohod
+from src import (
     get_async_session,
     Source,
     Log,
@@ -17,6 +12,7 @@ from src.database import (
     SmartlabStock,
     DohodDiv,
 )
+
 
 app = FastAPI(title="Parser Project API")
 

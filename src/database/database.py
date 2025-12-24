@@ -1,13 +1,9 @@
-"""
-Асинхронное подключение к базе данных через SQLAlchemy + asyncpg
-"""
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from typing import AsyncGenerator, Optional
-import os
 
-from src.database.models import Base
+from src.database import Base
 
 # Инициализация движков
 _async_engine: Optional[object] = None

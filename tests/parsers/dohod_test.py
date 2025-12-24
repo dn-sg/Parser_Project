@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from datetime import date
-from src.parsers.sources.dohod import DohodParser  # Убедитесь, что импорт работает корректно
+from src.parsers.sources import DohodParser
 
 
 # Фикстура для парсера

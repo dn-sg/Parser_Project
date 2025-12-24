@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch, Mock
-from src.parsers.sources.base_parser import BaseParser
+from src.parsers.sources import BaseParser
 
 
 # Тесты инициализации

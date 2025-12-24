@@ -1,10 +1,9 @@
 from .base_parser import BaseParser
 from bs4 import BeautifulSoup
-from typing import List, Dict, Optional
+from typing import List, Dict
 import re
 import logging
 from datetime import datetime
-import json
 from src.database import Source
 
 

@@ -1,6 +1,6 @@
 from datetime import datetime
-from sqlalchemy import func as sql_func
-from src.database import get_sync_session, Source, Log
+from src import get_sync_session, Source, Log
+
 
 
 def _get_source_by_name(session, source_name: str) -> Source:

@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from bs4 import BeautifulSoup, Tag
-from src.parsers.sources.smartlab import SmartlabParser
+from bs4 import BeautifulSoup
+from src.parsers.sources import SmartlabParser
 
 
 # Фикстура для парсера

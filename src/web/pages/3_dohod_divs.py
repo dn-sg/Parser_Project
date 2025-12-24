@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
-from src.utils.api_client import get_json
-
+from src.utils import get_json
 st.set_page_config(page_title="Dohod Divs", layout="wide")
 
 st.title("Дивиденды")

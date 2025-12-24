@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-from src.utils.api_client import get_json, post_json
+from src.utils import get_json, post_json
+
 
 st.set_page_config(page_title="Dashboard", layout="wide")
 

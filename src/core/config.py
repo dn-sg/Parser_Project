@@ -1,14 +1,7 @@
-"""
-Configuration settings using environment variables
-"""
-import os
-from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Config(BaseSettings):
-    """Application configuration"""
-    
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 
     # PostgreSQL
