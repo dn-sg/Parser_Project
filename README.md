@@ -42,6 +42,9 @@
 │   ├── core/
 │   │   └── config.py
 │   ├── database/
+│   │   ├── __init__.py
+│   │   ├── database.py
+│   │   ├── models.py
 │   │   └── init.sql
 │   ├── parsers/
 │   │   ├── __init__.py
