@@ -115,7 +115,7 @@ services:
       context: .
       dockerfile: infra/docker/web.dockerfile
     container_name: scraper_dashboard
-    command: streamlit run src/web/main.py --server.address 0.0.0.0 --server.port 8501
+    command: streamlit run src/web/home.py --server.address 0.0.0.0 --server.port 8501
     environment:
       API_BASE: http://web:8000
       PYTHONPATH: /app
