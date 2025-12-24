@@ -15,7 +15,7 @@ if df.empty:
 
 df["parsed_at"] = pd.to_datetime(df["parsed_at"], errors="coerce")
 
-st.subheader("🔍 Фильтры")
+st.subheader("Фильтры")
 
 c1, c2, c3 = st.columns([2, 3, 3])
 

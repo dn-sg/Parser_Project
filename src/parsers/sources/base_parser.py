@@ -1,6 +1,4 @@
-"""
-Базовый класс для парсеров
-"""
+# Базовый класс для парсеров
 import requests
 from bs4 import BeautifulSoup
 from typing import List, Dict, Optional
@@ -9,15 +7,10 @@ from sqlalchemy.orm import Session
 from src.database import get_sync_session, Source
 
 class BaseParser:
-    """Базовый класс для всех парсеров"""
-    
     def __init__(self, url: str, headers: Optional[Dict] = None):
         """
-        Инициализация парсера
-        
-        Args:
-            url: URL страницы для парсинга
-            headers: Заголовки HTTP запроса
+        url: URL страницы для парсинга
+        headers: Заголовки HTTP запроса
         """
         self.url = url
         self.headers = headers or {
@@ -28,10 +21,7 @@ class BaseParser:
     
     def fetch_html(self) -> Optional[str]:
         """
-        Получение HTML содержимого страницы
-        
-        Returns:
-            HTML содержимое или None в случае ошибки
+        HTML содержимое или None в случае ошибки
         """
         try:
             response = self.session.get(self.url, headers=self.headers, timeout=10)
@@ -43,22 +33,13 @@ class BaseParser:
     
     def parse(self) -> List[Dict]:
         """
-        Основной метод парсинга. Должен быть переопределен в дочерних классах
-        
-        Returns:
-            Список словарей с данными о компаниях/акциях
+        Список словарей с данными о компаниях/акциях
         """
         raise NotImplementedError("Метод parse() должен быть реализован в дочернем классе")
     
     def to_json(self, data: List[Dict]) -> str:
         """
         Преобразование данных в JSON строку
-        
-        Args:
-            data: Список словарей с данными
-            
-        Returns:
-            JSON строка
         """
         return json.dumps(data, ensure_ascii=False, indent=2)
 
@@ -70,17 +51,10 @@ class BaseParser:
     def _get_source_by_name(self, session: Session, name: str) -> Optional[Source]:
         """Получает источник по имени"""
         return session.query(Source).filter(Source.name == name).first()
-
-    def save_to_db(self, data: List[Dict]) -> None:
-        """Метод сохранения в БД (переопределяется в детях)"""
-        raise NotImplementedError("Метод save_to_db() должен быть реализован в дочернем классе")
     
     def get_parsed_data(self) -> str:
         """
-        Получение данных в формате JSON
-        
-        Returns:
-            JSON строка с данными
+        JSON строка с данными
         """
         data = self.parse()
         return self.to_json(data)

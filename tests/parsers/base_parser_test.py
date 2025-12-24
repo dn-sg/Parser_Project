@@ -100,13 +100,6 @@ def test_parse_not_implemented():
         parser.parse()
 
 
-def test_save_to_db_not_implemented():
-    """Тест, что save_to_db() выбрасывает NotImplementedError"""
-    parser = BaseParser("https://example.com")
-    with pytest.raises(NotImplementedError):
-        parser.save_to_db([{"test": "data"}])
-
-
 # Тесты get_parsed_data
 def test_get_parsed_data():
     """Тест получения данных в формате JSON"""

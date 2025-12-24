@@ -4,7 +4,7 @@ from src.database import get_sync_session, Source, Log
 
 
 def _get_source_by_name(session, source_name: str) -> Source:
-    """Get source by name using SQLAlchemy"""
+    """Get source by name"""
     source = session.query(Source).filter(Source.name == source_name).first()
     if not source:
         raise RuntimeError(f"Source '{source_name}' not found in table source")
@@ -12,7 +12,7 @@ def _get_source_by_name(session, source_name: str) -> Source:
 
 
 def _log_started(source_name: str, celery_task_id: str) -> int:
-    """Log task start using SQLAlchemy"""
+    """Log task"""
     session = get_sync_session()
     try:
         source = _get_source_by_name(session, source_name)
@@ -35,7 +35,7 @@ def _log_started(source_name: str, celery_task_id: str) -> int:
 
 
 def _log_finished(log_id: int, status: str, error_message: str | None = None, items_parsed: int = 0):
-    """Log task finish using SQLAlchemy"""
+    """Log task finish"""
     session = get_sync_session()
     try:
         log = session.query(Log).filter(Log.id == log_id).first()

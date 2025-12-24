@@ -6,7 +6,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.title("📊 Parser Project")
+st.title("Parser Project")
 
 st.divider()
 
@@ -30,7 +30,7 @@ with col1:
     st.markdown("- Данные о выплатах и финансовых показателях")
 
 with col2:
-    st.markdown("## 👥 Команда проекта")
+    st.markdown("## Команда проекта")
     
     team_members = [
         {"name": "Сергунов Даниил", "telegram": "@Dan_DS"},
